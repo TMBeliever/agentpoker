@@ -295,7 +295,9 @@ class StrategyAgent:
             return {"type": "call"}
         if "raise" in legal:
             return self._sized_raise(legal, strength=strength, value=False, pressure=pressure, pot=pot, bb_size=bb_size)
-        raise ValueError("no legal action")
+        if "bet" in legal:
+            return self._sized_bet(legal, value=False, pressure=pressure, pot=pot, bb_size=bb_size)
+        return self._safe_action(legal)
 
     def _preflop(self, legal: dict[str, Any], hero: list[Any], obs: dict[str, Any], pressure: float, villain: dict[str, Any]) -> dict[str, Any]:
         a, b = sorted([c.rank for c in hero], reverse=True)
@@ -365,14 +367,24 @@ class StrategyAgent:
             return {"type": "call"}
         if "allIn" in legal:
             return {"type": "allIn"}
-        return self._sized_raise(legal, pot=pot, bb_size=bb_size, strength=score, value=premium, pressure=pressure)
+        if "raise" in legal:
+            return self._sized_raise(legal, pot=pot, bb_size=bb_size, strength=score, value=premium, pressure=pressure)
+        if "bet" in legal:
+            return self._sized_bet(legal, pot=pot, bb_size=bb_size, value=premium, pressure=pressure)
+        return self._safe_action(legal)
 
     def _preflop_raise(self, legal: dict[str, Any], premium: bool, bb_size: float = 200.0) -> dict[str, Any]:
-        spec = legal["raise"]
+        spec = legal.get("raise", legal.get("bet"))
+        if not spec:
+            return {"type": "allIn"} if "allIn" in legal else {"type": "call"}
         lo, hi = int(spec[0]), int(spec[1])
+        action_type = "raise" if "raise" in legal else "bet"
+        if lo >= hi:
+            if "allIn" in legal:
+                return {"type": "allIn"}
+            return {"type": action_type, "amount": hi}
         target = int((self.params.open_size + (0.6 if premium else 0.0)) * bb_size)
-        target = max(lo, target)
-        return {"type": "raise", "amount": max(lo, min(hi, target))}
+        return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _equity(self, hero: list[Any], board: list[Any], opponents: int) -> float:
         samples = int(self.params.equity_samples)
@@ -410,25 +422,41 @@ class StrategyAgent:
         return self._noise(max(0.05, min(0.98, p)))
 
     def _sized_raise(self, legal: dict[str, Any], strength: float = 0.5, value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0) -> dict[str, Any]:
-        lo, hi = map(int, legal["raise"])
+        spec = legal.get("raise", legal.get("bet"))
+        if not spec:
+            return {"type": "allIn"} if "allIn" in legal else {"type": "call"}
+        lo, hi = map(int, spec)
+        action_type = "raise" if "raise" in legal else "bet"
+        if lo >= hi:
+            if "allIn" in legal:
+                return {"type": "allIn"}
+            return {"type": action_type, "amount": hi}
         if strength >= self.params.jam_threshold and (pressure > 0.2 or value):
-            return {"type": "raise", "amount": hi}
+            return {"type": "allIn"} if "allIn" in legal else {"type": action_type, "amount": hi}
         base = self.params.value_bet_size if value else self.params.bluff_bet_size
         frac = (base + 0.10 * max(0.0, pressure) + 0.12 * max(0.0, strength - 0.75)) * size_mult
         if pot > 0:
             target = int(lo + pot * frac * 0.5)
         else:
             target = int(lo + (hi - lo) * max(0.05, min(0.90, frac)))
-        return {"type": "raise", "amount": max(lo, min(hi, target))}
+        return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _sized_bet(self, legal: dict[str, Any], value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0) -> dict[str, Any]:
-        lo, hi = map(int, legal.get("bet", legal.get("raise")))
+        spec = legal.get("bet", legal.get("raise"))
+        if not spec:
+            return {"type": "allIn"} if "allIn" in legal else ({"type": "check"} if "check" in legal else {"type": "call"})
+        lo, hi = map(int, spec)
+        action_type = "bet" if "bet" in legal else "raise"
+        if lo >= hi:
+            if "allIn" in legal:
+                return {"type": "allIn"}
+            return {"type": action_type, "amount": hi}
         frac = ((self.params.value_bet_size if value else self.params.bluff_bet_size) + 0.08 * max(0.0, pressure)) * size_mult
         if pot > 0:
             target = int(max(pot * frac, bb_size))
         else:
             target = int(lo + (hi - lo) * max(0.05, min(0.88, frac)))
-        return {"type": "bet", "amount": max(lo, min(hi, target))}
+        return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _noise(self, probability: float) -> bool:
         t = max(0.0, min(1.0, self.params.temperature))
@@ -532,6 +560,13 @@ class StrategyAgent:
             if k in amap:
                 if k in ("raise", "bet"):
                     spec = amap[k]
+                    if isinstance(spec, (tuple, list)):
+                        lo, hi = int(spec[0]), int(spec[1])
+                        return {"type": k, "amount": min(lo, hi)}
+                    elif isinstance(spec, dict):
+                        lo = int(spec.get("minAmount", 1))
+                        hi = int(spec.get("maxAmount", lo))
+                        return {"type": k, "amount": min(lo, hi)}
                     return {"type": k, "amount": int(spec.get("minAmount", spec.get("amount", 1)))}
                 return {"type": k}
         raise ValueError("no legal action")

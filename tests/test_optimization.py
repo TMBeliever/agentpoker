@@ -175,3 +175,29 @@ def test_opponent_profiler_quality_filters():
     assert "good_player" in cleaned
     assert "noisy_newbie" not in cleaned
     assert "zombie_bot" not in cleaned
+
+def test_short_stack_min_raise_boundary():
+    agent = StrategyAgent(seed=42)
+    # Scenario: hero is short-stacked (500 chips remaining), table has min bet = 1000
+    obs = {
+        "agentId": "hero",
+        "hero": ["Ah", "Kd"],
+        "board": [],
+        "pot": 2000,
+        "stack": 500,
+        "big_blind": 1000,
+        "position": 1,
+        "dealer_seat": 0,
+        "players": [
+            {"agentId": "hero", "stack": 500, "folded": False},
+            {"agentId": "villain", "stack": 20000, "folded": False}
+        ],
+        # lo > hi boundary condition
+        "legal": {"check": None, "bet": (1000, 500), "allIn": 500}
+    }
+    decision = agent.choose_local(obs)
+    # Must never emit bet > 500
+    if decision["type"] in ("bet", "raise"):
+        assert decision["amount"] <= 500
+    else:
+        assert decision["type"] in ("allIn", "check", "fold")
