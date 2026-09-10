@@ -10,6 +10,30 @@ class OpponentProfiler:
         self.stats: dict[str, dict[str, Any]] = {}
         self.names: dict[str, str] = {}
 
+    @staticmethod
+    def _new_stats() -> dict[str, Any]:
+        return {
+            "hands": 0,
+            "vpip": 0,
+            "pfr": 0,
+            "raises": 0,
+            "bets": 0,
+            "calls": 0,
+            "folds": 0,
+            "checks": 0,
+            "allins": 0,
+            "wtsd": 0,
+            "net_pnl": 0,
+            "bb_sum": 0.0,
+            # Bet-sizing samples. Sizing is the most exploitable dimension of a real
+            # player's game and it was previously not extracted at all, which left every
+            # profiled opponent using identical default sizings.
+            "open_bb_samples": [],
+            "cbet_frac_samples": [],
+            "bet_frac_samples": [],
+            "raise_frac_samples": [],
+        }
+
     def ingest_hand(self, data: dict[str, Any]) -> None:
         """Ingest a single hand observation, raw event, or API hand dictionary."""
         if isinstance(data, dict) and "actions" in data and "players" in data:
@@ -36,19 +60,7 @@ class OpponentProfiler:
                 participating_agents.add(p)
 
         for aid in participating_agents:
-            st = self.stats.setdefault(aid, {
-                "hands": 0,
-                "vpip": 0,
-                "pfr": 0,
-                "raises": 0,
-                "bets": 0,
-                "calls": 0,
-                "folds": 0,
-                "checks": 0,
-                "allins": 0,
-                "wtsd": 0,
-                "net_pnl": 0,
-            })
+            st = self.stats.setdefault(aid, self._new_stats())
             st["hands"] += 1
 
         for p in players:
@@ -61,30 +73,60 @@ class OpponentProfiler:
         has_vpip = set()
         has_pfr = set()
 
+        # Replay the pot so each wager can be expressed relative to it. Action `amount`
+        # is the extra chips committed by that action, so the pot is their running sum.
+        pot = 0.0
+        bb_size: float | None = None
+        street_commit: dict[str, float] = {}
+        street_raises = 0
+        cur_street = "preflop"
+        preflop_aggressor: str | None = None
+
         for a in actions:
             if not isinstance(a, dict):
                 continue
             aid = a.get("agentId")
             if not aid:
                 continue
-            st = self.stats.setdefault(aid, {
-                "hands": 0,
-                "vpip": 0,
-                "pfr": 0,
-                "raises": 0,
-                "bets": 0,
-                "calls": 0,
-                "folds": 0,
-                "checks": 0,
-                "allins": 0,
-                "wtsd": 0,
-                "net_pnl": 0,
-            })
+            st = self.stats.setdefault(aid, self._new_stats())
             typ = a.get("type")
             street = a.get("street", "preflop")
+            amount = float(a.get("amount") or 0)
 
+            if street != cur_street:
+                cur_street = street
+                street_commit = {}
+                street_raises = 0
+
+            if typ == "bigBlind" and amount > 0:
+                bb_size = amount
             if typ in {"smallBlind", "bigBlind"}:
+                pot += amount
                 continue
+
+            if typ in {"raise", "bet", "allIn"} and amount > 0:
+                if street == "preflop":
+                    # Only the street's first raise is an "open"; later ones are 3-bets
+                    # and would otherwise inflate the measured opening size.
+                    if street_raises == 0:
+                        total = street_commit.get(aid, 0.0) + amount
+                        if bb_size:
+                            st["open_bb_samples"].append(total / bb_size)
+                elif pot > 0:
+                    frac = amount / pot
+                    if street == "flop" and typ == "bet" and aid == preflop_aggressor:
+                        st["cbet_frac_samples"].append(frac)
+                    elif typ == "bet":
+                        st["bet_frac_samples"].append(frac)
+                    else:
+                        st["raise_frac_samples"].append(frac)
+
+            if typ in {"raise", "allIn"}:
+                street_raises += 1
+                if street == "preflop":
+                    preflop_aggressor = aid
+            street_commit[aid] = street_commit.get(aid, 0.0) + amount
+            pot += amount
 
             if typ in {"raise", "bet"}:
                 st["raises"] += 1
@@ -114,6 +156,13 @@ class OpponentProfiler:
                 st["folds"] += 1
             elif typ == "check":
                 st["checks"] += 1
+
+        # Big-blind denominator per hand, so bb/100 uses the table's real stake instead
+        # of assuming a fixed 1000.
+        if bb_size:
+            for aid in participating_agents:
+                if aid in self.stats:
+                    self.stats[aid]["bb_sum"] += bb_size
 
         # Check showdown participation
         showdowns = hand.get("showdown") or hand.get("payouts") or []
@@ -227,7 +276,22 @@ class OpponentProfiler:
 
             af = round((st["raises"] + st["bets"]) / max(1, st["calls"]), 2)
             net_pnl = st.get("net_pnl", 0)
-            bb_100 = round((net_pnl / 1000.0) / max(1, st["hands"]) * 100, 1)
+            bb_100 = round(net_pnl / max(1.0, st.get("bb_sum", 0.0)) * 100, 1)
+
+            def _avg(key: str, default: float, lo: float, hi: float) -> float:
+                vals = st.get(key) or []
+                if not vals:
+                    return default
+                return round(max(lo, min(hi, sum(vals) / len(vals))), 3)
+
+            # Measured sizings. These replace the defaults that every profiled opponent
+            # used to share, which made "exploit their sizing" impossible.
+            open_size_bb = _avg("open_bb_samples", 2.35, 2.0, 6.0)
+            cbet_size = _avg("cbet_frac_samples", 0.47, 0.15, 1.5)
+            value_bet_size = _avg("bet_frac_samples", 0.69, 0.15, 1.5)
+            raise_size = _avg("raise_frac_samples", 0.68, 0.15, 1.5)
+            sizing_samples = (len(st.get("open_bb_samples") or []) + len(st.get("cbet_frac_samples") or [])
+                              + len(st.get("bet_frac_samples") or []) + len(st.get("raise_frac_samples") or []))
 
             is_station = scall >= 0.38 and sfold <= 0.36
             is_nit = svpip <= 0.18 and sfold >= 0.58
@@ -280,6 +344,11 @@ class OpponentProfiler:
                 "fold": round(sfold, 3),
                 "call": round(scall, 3),
                 "af": af,
+                "open_size_bb": open_size_bb,
+                "cbet_size": cbet_size,
+                "value_bet_size": value_bet_size,
+                "raise_size": raise_size,
+                "sizing_samples": sizing_samples,
                 "archetype": archetype,
                 "is_station": is_station,
                 "is_nit": is_nit,

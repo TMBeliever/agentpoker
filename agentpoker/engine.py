@@ -42,6 +42,9 @@ class NLHEngine:
         self.sb = small_blind
         self.bb = big_blind
         self.rng = Random(seed)
+        # Monotonic per-engine hand counter, exposed to policies as obs["hand_id"] so that
+        # stateful observers can tell one hand from the next.
+        self.hand_seq = 0
 
     def play_hand(self, agents, stacks: dict[str, int], dealer_index: int, policies,
                   context_provider=None) -> tuple[HandResult, int]:
@@ -54,8 +57,21 @@ class NLHEngine:
         for p in players:
             p.hole = [cards.pop(), cards.pop()]
 
+        self.hand_seq += 1
         board: list[Card] = []
         actions: list[Action] = []
+        # Betting events are appended here as they happen and the *same list object* is
+        # handed to the policy on every decision, so a stateful observer can consume only
+        # what is new instead of rescanning the whole history (previously O(n^2) per hand).
+        recent_actions: list[dict[str, Any]] = []
+        seat_map = {p.seat: p.agent_id for p in players}
+
+        def record(seat: int, street: str, typ: str, amount: int,
+                   is_forced: bool = False, cause: str | None = None) -> None:
+            actions.append(Action(seat, street, typ, amount, is_forced, cause))
+            recent_actions.append({"agentId": seat_map.get(seat), "type": typ,
+                                   "amount": amount, "street": street})
+
         pot = 0
 
         if n == 2:
@@ -76,7 +92,7 @@ class NLHEngine:
             pot += put
             if p.stack == 0:
                 p.all_in = True
-            actions.append(Action(seat, "preflop", name, put, True))
+            record(seat, "preflop", name, put, is_forced=True)
 
         current_bet = max(p.committed_round for p in players)
         last_raise = self.bb
@@ -108,7 +124,7 @@ class NLHEngine:
                     for p in live:
                         if p.committed_round < current_bet:
                             p.folded = True
-                            actions.append(Action(p.seat, street, "fold", 0, cause="engine_guard"))
+                            record(p.seat, street, "fold", 0, cause="engine_guard")
                     break
                 live = [p for p in players if not p.folded and not p.all_in]
                 if len(live) <= 1:
@@ -119,22 +135,34 @@ class NLHEngine:
                     continue
 
                 to_call = max(0, current_bet - p.committed_round)
-                legal: dict[str, Any] = {"fold": None, "check": None, "call": to_call}
-                if p.stack <= to_call:
-                    if p.stack > 0:
-                        legal.pop("fold", None)
-                        legal["allIn"] = p.stack
+                # Legality mirrors the real Agent Poker action space: "check" only exists
+                # when there is nothing to call, and an opening wager is a "bet" rather
+                # than a "raise". Getting this wrong silently turns folds into free
+                # checks and bets into checks, so it is asserted by tests.
+                if to_call > 0:
+                    legal: dict[str, Any] = {"fold": None, "call": to_call}
+                    open_type = "raise"
                 else:
-                    min_extra = min(p.stack, to_call + (self.bb if current_bet == 0 else last_raise))
-                    if min_extra > to_call:
-                        legal["raise"] = (min_extra, p.stack)
+                    legal = {"check": None}
+                    open_type = "bet"
+                if p.stack > 0:
+                    if p.stack <= to_call:
+                        legal["allIn"] = p.stack
+                    else:
+                        min_extra = min(p.stack, to_call + (self.bb if current_bet == 0 else last_raise))
+                        if min_extra > to_call:
+                            legal[open_type] = (min_extra, p.stack)
 
                 ctx = context_provider(p.agent_id) if context_provider else {}
-                obs = self._obs(players, board, p, current_bet, pot, legal, street, ctx, dealer_index=dealer_index, actions=actions)
+                obs = self._obs(players, board, p, current_bet, pot, legal, street, ctx,
+                                dealer_index=dealer_index, recent_actions=recent_actions,
+                                hand_id=self.hand_seq)
                 decision = policies[p.agent_id].choose(obs)
                 t = decision.get("type")
                 if t not in legal:
-                    t = "check" if to_call == 0 and "check" in legal else ("call" if "call" in legal else "fold")
+                    # Defensive fallback. Fold is the safe default when facing a bet --
+                    # never silently match a bet on behalf of a misbehaving policy.
+                    t = "check" if "check" in legal else "fold"
 
                 put = 0
                 if t == "fold":
@@ -145,13 +173,9 @@ class NLHEngine:
                     put = min(p.stack, to_call)
                 elif t == "allIn":
                     put = p.stack
-                elif t == "raise":
-                    lo, hi = legal["raise"]
+                elif t in ("bet", "raise"):
+                    lo, hi = legal[t]
                     put = max(lo, min(hi, int(decision.get("amount", lo))))
-                elif t == "bet":
-                    lo, hi = legal.get("raise", (to_call + self.bb, p.stack))
-                    put = max(lo, min(hi, int(decision.get("amount", lo))))
-                    t = "raise"
 
                 if put:
                     p.stack -= put
@@ -161,7 +185,7 @@ class NLHEngine:
                 if p.stack == 0 and not p.folded:
                     p.all_in = True
 
-                if t == "raise":
+                if t in ("bet", "raise"):
                     new_bet = p.committed_round
                     delta = new_bet - current_bet
                     if current_bet == 0 or delta >= last_raise:
@@ -171,7 +195,7 @@ class NLHEngine:
                 else:
                     acted_since_raise.add(p.seat)
 
-                actions.append(Action(p.seat, street, t, put))
+                record(p.seat, street, t, put)
 
                 remaining = [q for q in players if not q.folded]
                 if len(remaining) <= 1:
@@ -199,19 +223,14 @@ class NLHEngine:
         }
         return HandResult(payouts, returned, actions, board, final_stacks), (dealer_index + 1) % n
 
-    def _obs(self, players, board, me, current_bet, pot, legal, street, context=None, dealer_index=None, actions=None):
-        recent_actions = []
-        if actions:
-            seat_map = {p.seat: p.agent_id for p in players}
-            for a in actions:
-                recent_actions.append({
-                    "agentId": seat_map.get(a.seat),
-                    "type": a.type,
-                    "amount": a.amount,
-                    "street": a.street,
-                })
-
+    def _obs(self, players, board, me, current_bet, pot, legal, street, context=None,
+             dealer_index=None, recent_actions=None, hand_id=None):
+        # `recent_actions` is the live, incrementally-built list owned by play_hand. It is
+        # passed by reference on purpose: rebuilding it per decision was the single
+        # hottest path in the simulator. Observers must consume it with a cursor rather
+        # than assume it is a private snapshot.
         return {
+            "hand_id": hand_id,
             "context": context or {},
             "hero": [str(c) for c in me.hole],
             "board": [str(c) for c in board],
@@ -223,7 +242,7 @@ class NLHEngine:
             "dealer_seat": dealer_index,
             "big_blind": self.bb,
             "agentId": me.agent_id,
-            "recent_actions": recent_actions,
+            "recent_actions": recent_actions if recent_actions is not None else [],
             "players": [
                 {
                     "agentId": p.agent_id,
@@ -258,7 +277,9 @@ class NLHEngine:
                 p = max_players[0]
                 excess = top - second
                 p.committed_total -= excess
-                p.stack += excess
+                # The unmatched excess leaves the pot. It is *credited* via `returned`
+                # only -- play_hand adds `returned` on top of `p.stack`, so also mutating
+                # p.stack here double-counts it and mints chips out of nothing.
                 returned[p.agent_id] += excess
 
         levels = sorted({p.committed_total for p in players if p.committed_total > 0})

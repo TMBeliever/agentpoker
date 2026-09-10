@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from random import Random
 from .engine import NLHEngine
+from .context import build_context
 from .pairing import random_groups, swiss_groups
 from .scoring import Standing, bb100, rank_standings
 from .strategy import StrategyAgent, StrategyParams
@@ -28,9 +29,18 @@ class LeagueSimulator:
         return rank_standings(rows, tie_round=tie_round)
 
     def _context(self, aid, st, round_no, hands_remaining):
-        rows=self._standings(st); me=next(x for x in rows if x.agent_id==aid)
+        return self._context_map(st, round_no, hands_remaining).get(aid, {})
+
+    def _context_map(self, st, round_no, hands_remaining):
+        """Tournament context for every agent, computed once per hand.
+
+        Standings only change between hands, so ranking them on every single decision
+        was pure waste (and one of the three hot paths in the simulator).
+        """
+        rows=self._standings(st)
         r12=next((x.bb100 for x in rows if x.rank==12),None); r13=next((x.bb100 for x in rows if x.rank==13),None)
-        return {'rank':me.rank,'bb100':me.bb100,'rank12_bb100':r12,'rank13_bb100':r13,'hands_remaining':hands_remaining,'round_no':round_no}
+        return {x.agent_id:build_context(x.rank, x.bb100, r12, r13, hands_remaining, round_no)
+                for x in rows}
 
     def _play_group(self, group, st, round_no, hands_this_round):
         dealer=0
@@ -42,7 +52,9 @@ class LeagueSimulator:
             for aid in group:
                 if st[aid]['stack']<=0: st[aid]['stack']=100*self.big_blind
             before={aid:st[aid]['stack'] for aid in group}
-            provider=lambda aid:self._context(aid,st,round_no,self.rounds*self.hpr-(round_no-1)*self.hpr-hand_i)
+            hands_remaining=self.rounds*self.hpr-(round_no-1)*self.hpr-hand_i
+            # Built once per hand: identical for every decision inside it.
+            provider=self._context_map(st,round_no,hands_remaining).get
             res,dealer=self.engine.play_hand(group,{aid:st[aid]['stack'] for aid in group},dealer,policies,context_provider=provider)
             for aid in group:
                 st[aid]['stack']=res.final_stacks[aid]

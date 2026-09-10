@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import asdict, replace
 from pathlib import Path
-import json, random
+import json, math, random, statistics
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
@@ -15,6 +15,42 @@ ARCHETYPES = {
     "maniac": StrategyParams(vpip=.48, open_frequency=.83, threebet_frequency=.145, squeeze_frequency=.110, steal_frequency=.90, cbet_frequency=.77, turn_barrel_frequency=.72, river_bluff_frequency=.18, value_threshold=.54, thin_value_threshold=.50, raise_threshold=.50, jam_threshold=.80, open_size=2.55, cbet_size=.56, value_bet_size=.62, bluff_bet_size=.64, raise_size=.82, safety=.72, attack=.96, bubble_aggression=.98, late_aggression=.42, temperature=.18),
 }
 
+def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
+    """Aggregate per-run outcomes into fitness plus its own uncertainty.
+
+    Reporting a bare point estimate hides the fact that with a handful of tournament
+    runs the fitness differences between generations are pure noise, so the standard
+    error and a 95% interval travel with every result.
+    """
+    runs = max(1, runs)
+    top_rate, final_rate, champ_rate = top / runs, final / runs, champ / runs
+    avg_rank = sum(ranks) / runs
+    avg_bb = sum(bbs) / runs
+    fit = (.58 * top_rate + .22 * final_rate + .15 * champ_rate
+           + .05 * (1.0 - min(avg_rank - 1, pool - 1) / (pool - 1)))
+
+    def var_prop(p):  # Var of a proportion over `runs` independent tournaments
+        return p * (1.0 - p) / runs
+
+    def cov(p1, p2):  # nested events: P(A and B) = min(p1, p2)
+        return (min(p1, p2) - p1 * p2) / runs
+
+    var = (.58 ** 2) * var_prop(top_rate) + (.22 ** 2) * var_prop(final_rate) \
+        + (.15 ** 2) * var_prop(champ_rate) \
+        + 2 * .58 * .22 * cov(top_rate, final_rate) \
+        + 2 * .58 * .15 * cov(top_rate, champ_rate) \
+        + 2 * .22 * .15 * cov(final_rate, champ_rate)
+    if runs > 1 and len(ranks) > 1:
+        var += (.05 / (pool - 1)) ** 2 * (statistics.variance(ranks) / runs)
+    se = math.sqrt(max(0.0, var))
+    return {
+        "top12_rate": top_rate, "final_rate": final_rate, "champion_rate": champ_rate,
+        "avg_rank": avg_rank, "avg_bb100": avg_bb, "fitness": fit,
+        "fitness_se": se, "fitness_ci95": [fit - 1.96 * se, fit + 1.96 * se],
+        "runs": runs,
+    }
+
+
 def _evaluate_worker(payload):
     focal, opponents, seed, runs, equity_samples = payload[:5]
     verbose = payload[5] if len(payload) > 5 else False
@@ -22,7 +58,11 @@ def _evaluate_worker(payload):
     for i,p in enumerate(opponents):
         agents.append(SimAgent(f"opp{i}", StrategyAgent(replace(p, equity_samples=equity_samples), seed=seed+31*i+17, name=f"opp{i}")))
     top=final=champ=0; rank_sum=bb_sum=0.0
+    ranks: list[float] = []; bbs: list[float] = []
     for run in range(runs):
+        # Seeding is a pure function of (seed, run), so every candidate handed the same
+        # seed base plays the identical sequence of deals against an identical opponent
+        # line-up. That is what makes candidate comparisons paired rather than noise-on-noise.
         s=seed+run*7919
         seeded=[]
         for j,a in enumerate(agents):
@@ -31,6 +71,7 @@ def _evaluate_worker(payload):
         result=sim.run_event()
         standings=result["preliminary"]
         me=next(x for x in standings if x.agent_id=="focal")
+        ranks.append(float(me.rank or len(standings))); bbs.append(float(me.bb100 or 0.0))
         rank_sum += me.rank or len(standings); bb_sum += me.bb100 or 0.0
         q={x.agent_id for x in result["qualified"]}; f={x.agent_id for x in result["final"]}
         is_top12 = "focal" in q
@@ -61,32 +102,62 @@ def _evaluate_worker(payload):
                 flush=True
             )
 
-    top_rate, final_rate, champ_rate=top/runs, final/runs, champ/runs
-    avg_rank, avg_bb=rank_sum/runs, bb_sum/runs
-    fit=.58*top_rate+.22*final_rate+.15*champ_rate+.05*(1.0-min(avg_rank-1, len(agents)-1)/(len(agents)-1))
-    return {"top12_rate":top_rate,"final_rate":final_rate,"champion_rate":champ_rate,"avg_rank":avg_rank,"avg_bb100":avg_bb,"fitness":fit}
+    return _summarise(top, final, champ, ranks, bbs, runs, len(agents))
 
 def profile_to_params(p: dict[str, Any]) -> StrategyParams:
-    """Map a real player profile's empirical statistics into a StrategyParams agent."""
-    vpip = max(0.08, min(0.85, float(p.get("vpip", 0.25))))
-    pfr = max(0.03, min(0.70, float(p.get("pfr", p.get("raise", 0.16)))))
-    af = float(p.get("af", 2.0))
+    """Map a real player profile's empirical statistics into a StrategyParams agent.
+
+    Covers all 23 behavioural parameters. Previously eleven of them -- including every
+    bet sizing -- were left at defaults, so all 59 profiled opponents shared identical
+    sizing and only differed in how often they entered pots.
+    """
+    def num(key: str, default: float, lo: float, hi: float) -> float:
+        try:
+            return max(lo, min(hi, float(p.get(key, default))))
+        except (TypeError, ValueError):
+            return default
+
+    vpip = num("vpip", 0.25, 0.08, 0.85)
+    pfr = num("pfr", p.get("raise", 0.16) if isinstance(p.get("raise"), (int, float)) else 0.16, 0.03, 0.70)
+    af = num("af", 2.0, 0.3, 25.0)
     is_nit = bool(p.get("is_nit", False))
     is_maniac = bool(p.get("is_maniac", False))
     is_station = bool(p.get("is_station", False))
+    is_passive = bool(p.get("is_passive", False))
+    af_norm = min(1.0, af / 8.0)
 
     return StrategyParams(
+        # Preflop frequencies
         vpip=vpip,
         open_frequency=min(0.95, max(0.35, pfr * 1.3)),
         threebet_frequency=min(0.30, max(0.03, pfr * 0.45)),
+        squeeze_frequency=min(0.25, max(0.02, pfr * 0.30)),
         steal_frequency=min(0.95, max(0.30, pfr * 1.5)),
+        # Postflop frequencies
         cbet_frequency=min(0.90, max(0.30, 0.45 + af * 0.04)),
         turn_barrel_frequency=min(0.85, max(0.20, 0.40 + af * 0.03)),
         river_bluff_frequency=0.18 if is_maniac else (0.02 if (is_nit or is_station) else 0.07),
-        value_threshold=0.55 if is_maniac else (0.72 if is_nit else 0.65),
-        open_size=2.40 if is_maniac else 2.25,
-        attack=min(0.98, max(0.30, af / 10.0 + 0.35)),
+        # Thresholds live on the calibrated-equity scale (0..1 win probability)
+        value_threshold=num("value_threshold", 0.56 if is_maniac else (0.72 if is_nit else 0.65), 0.45, 0.90),
+        thin_value_threshold=0.50 if is_maniac else (0.62 if is_nit else 0.57),
+        raise_threshold=0.58 if is_maniac else (0.68 if is_nit else 0.62),
+        jam_threshold=0.84 if is_maniac else (0.93 if is_nit else 0.90),
+        # Measured sizings, straight from the hands this opponent actually played
+        open_size=num("open_size_bb", 2.40 if is_maniac else 2.25, 2.0, 3.5),
+        cbet_size=num("cbet_size", 0.47, 0.15, 0.95),
+        value_bet_size=num("value_bet_size", 0.74 if is_station else 0.69, 0.15, 0.95),
+        # Bluff sizing is not directly measurable from hand histories (a bet looks the
+        # same whether it is value or air), so scale it off the measured bet size:
+        # most players fire smaller when bluffing than when value betting.
+        bluff_bet_size=max(0.15, min(0.95, 0.85 * num("value_bet_size", 0.69, 0.15, 0.95))),
+        raise_size=num("raise_size", 0.68, 0.15, 0.95),
+        # Tournament traits
         safety=0.65 if is_nit else (0.25 if is_maniac else 0.45),
+        attack=min(0.98, max(0.30, af / 10.0 + 0.35)),
+        bubble_aggression=0.55 + 0.35 * af_norm,
+        late_aggression=0.10 + 0.35 * af_norm,
+        # Passive players are predictable; maniacs are not.
+        temperature=0.03 if (is_nit or is_passive) else (0.16 if is_maniac else 0.10),
     )
 
 class ArenaEvaluator:
@@ -112,6 +183,7 @@ class ArenaEvaluator:
             tasks = [(focal, opponents, self.seed + seed_offset + r * 7919, 1, self.equity_samples, False) for r in range(runs)]
             top = final = champ = 0
             rank_sum = bb_sum = 0.0
+            ranks: list[float] = []; bbs: list[float] = []
             print(f"[评估开始] 正在启动 {runs} 场锦标赛 (多核并发: {workers} 个工作进程)...", flush=True)
             with ProcessPoolExecutor(max_workers=workers) as ex:
                 futs = {ex.submit(_evaluate_worker, t): i for i, t in enumerate(tasks)}
@@ -124,6 +196,7 @@ class ArenaEvaluator:
                     is_champ = int(r_res["champion_rate"] > 0)
                     top += is_top12; final += is_final; champ += is_champ
                     rank_sum += r_res["avg_rank"]; bb_sum += r_res["avg_bb100"]
+                    ranks.append(float(r_res["avg_rank"])); bbs.append(float(r_res["avg_bb100"]))
                     if verbose:
                         cum_bb = bb_sum / completed
                         cum_top = (top / completed) * 100.0
@@ -139,10 +212,7 @@ class ArenaEvaluator:
                             f"累计走势: {cum_bb:+.1f} BB/100 (出线率 {cum_top:.0f}%, 夺冠率 {cum_champ:.0f}%)",
                             flush=True
                         )
-            top_rate, final_rate, champ_rate = top / runs, final / runs, champ / runs
-            avg_rank, avg_bb = rank_sum / runs, bb_sum / runs
-            fit = .58 * top_rate + .22 * final_rate + .15 * champ_rate + .05 * (1.0 - min(avg_rank - 1, self.pool_size - 1) / (self.pool_size - 1))
-            return {"top12_rate": top_rate, "final_rate": final_rate, "champion_rate": champ_rate, "avg_rank": avg_rank, "avg_bb100": avg_bb, "fitness": fit}
+            return _summarise(top, final, champ, ranks, bbs, runs, self.pool_size)
         else:
             if verbose:
                 print(f"[评估开始] 正在顺序执行 {runs} 场锦标赛测试 (每场 200 手预赛 + 淘汰赛)...", flush=True)
@@ -163,13 +233,45 @@ class ArenaEvaluator:
 class StrategyTrainer:
     """Full population strategy evolution: crossover + mutation + cross-play + racing."""
     FIELDS=tuple(k for k in asdict(StrategyParams()).keys() if k!="equity_samples")
-    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None):
+    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25):
         self.rng=random.Random(seed); self.seed=seed; self.pool_size=max(12,pool_size); self.equity_samples=equity_samples; self.workers=workers
         self.profiles=profiles
+        self.holdout_frac=min(0.5, max(0.0, float(holdout_frac)))
         self._cached_profile_params = []
         if self.profiles:
             profs = ArenaEvaluator._load_profiles(self.profiles)
             self._cached_profile_params = [profile_to_params(p) for p in profs]
+        self._build_holdout()
+
+    def _build_holdout(self):
+        """Split opponents into a training pool and a held-out validation pool.
+
+        Training only ever sees `_train_profile_params` and the raw archetypes; the
+        champion is finally validated against strategies it has never been selected
+        against, so the reported number is out-of-sample rather than a best-of-N
+        re-read of the training set.
+        """
+        hrng = random.Random(self.seed + 4242)
+        prof = list(self._cached_profile_params)
+        hrng.shuffle(prof)
+        cut = int(len(prof) * self.holdout_frac)
+        self._holdout_profile_params = prof[:cut]
+        self._train_profile_params = prof[cut:]
+
+        # Unseen opponents: perturbed archetypes, generated deterministically and kept
+        # out of the training pool entirely.
+        state = self.rng.getstate()
+        self._holdout_archetypes = [self.mutate(p, 0.12) for p in ARCHETYPES.values()
+                                    for _ in range(2)]
+        self.rng.setstate(state)
+
+    def _holdout_pool(self):
+        pool = list(self._holdout_profile_params) + list(self._holdout_archetypes)
+        rng = random.Random(self.seed + 90210)
+        out = []
+        while len(out) < self.pool_size - 1:
+            out.append(replace(rng.choice(pool)))
+        return out
 
     def mutate(self,p,sigma):
         d=asdict(p)
@@ -194,25 +296,29 @@ class StrategyTrainer:
         while len(pop)<n: pop.append(self.mutate(self.rng.choice(seeds),.06))
         return pop[:n]
 
-    def _opponents(self, focal, population, hall, seed):
-        candidates=[]
-        if self._cached_profile_params:
-            candidates.extend(self._cached_profile_params)
+    def _draw_pool(self, population, hall, seed, profile_pool, exclude=None):
+        candidates=list(profile_pool)
         candidates.extend(ARCHETYPES.values()); candidates.extend(population); candidates.extend(hall)
+        rng=random.Random(seed)
         out=[]
-        self.rng.seed(seed)
         while len(out)<self.pool_size-1:
-            p=self.rng.choice(candidates)
-            if p is focal: continue
+            p=rng.choice(candidates)
+            if p is exclude: continue
             out.append(replace(p))
-        self.rng.seed(self.seed + seed)
         return out
 
-    def _score_population(self,pop,hall,generation,runs):
-        tasks=[]
-        for i,p in enumerate(pop):
-            opp=self._opponents(p,pop,hall,generation*100000+i)
-            tasks.append((p,opp,self.seed+generation*1000003+i*1009,runs,self.equity_samples))
+    def _opponents(self, focal, population, hall, seed):
+        return self._draw_pool(population, hall, seed, self._train_profile_params, exclude=focal)
+
+    def _score_population(self,pop,hall,generation,runs,pool=None,seed_base=None):
+        # Common random numbers: one opponent line-up and one seed base shared by every
+        # candidate in the batch, so differences between candidates reflect skill rather
+        # than each candidate drawing its own deals and its own opponents.
+        if pool is None:
+            pool=self._draw_pool(pop,hall,self.seed*7919+generation,self._train_profile_params)
+        if seed_base is None:
+            seed_base=self.seed+generation*1000003
+        tasks=[(p,pool,seed_base,runs,self.equity_samples) for p in pop]
         workers=self.workers or min(8,len(tasks))
         if workers<=1:
             return [(_evaluate_worker(t),p) for t,p in zip(tasks,pop)]
@@ -222,7 +328,7 @@ class StrategyTrainer:
             for fut in as_completed(futs): results[futs[fut]]=fut.result()
         return list(zip(results,pop))
 
-    def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True):
+    def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True,reeval_runs=24):
         ap=Path(archive); ap.mkdir(parents=True,exist_ok=True)
         start_gen=0; history=[]; hall=[]; champion=None; champion_metrics=None
 
@@ -256,15 +362,37 @@ class StrategyTrainer:
         else:
             pop = self.seed_population(population)
 
+        def _rank(scored_pairs):
+            return sorted(((m,p) for m,p in scored_pairs),
+                          key=lambda x:(x[0]["fitness"],x[0]["top12_rate"],x[0]["champion_rate"],-x[0]["avg_rank"]),
+                          reverse=True)
+
+        # Carried forward when generations == 0 so the tail below always has a champion.
+        re_ranked = [(champion_metrics, champion)] if champion is not None else None
+
         for g in range(start_gen, start_gen + generations):
             sigma=max(.012,.075*(.92**g))
             scored=self._score_population(pop,hall,g,runs_per_candidate)
-            ranked=sorted(((m,p) for m,p in scored),key=lambda x:(x[0]["fitness"],x[0]["top12_rate"],x[0]["champion_rate"],-x[0]["avg_rank"]),reverse=True)
-            champion_metrics,champion=ranked[0]
-            history.append({"generation":g+1,"sigma":sigma,"params":asdict(champion),"metrics":champion_metrics})
-            print(f"gen={g+1:03d} fitness={champion_metrics['fitness']:.4f} top12={champion_metrics['top12_rate']:.3f} final={champion_metrics['final_rate']:.3f} champ={champion_metrics['champion_rate']:.3f} avg_rank={champion_metrics['avg_rank']:.2f}", flush=True)
+            ranked=_rank(scored)
+            elite_n=max(3,population//4)
+            elites=[p for _,p in ranked[:elite_n]]
+
+            # The generation winner is the maximum of a noisy sample, so its in-sample
+            # fitness is biased upward. Re-score the shortlist on a fresh opponent pool
+            # and a fresh seed base before crowning anything.
+            re_pool=self._draw_pool(pop,hall,self.seed*104729+g,self._train_profile_params)
+            re_scored=self._score_population(elites,hall,g,max(1,reeval_runs),
+                                             pool=re_pool, seed_base=self.seed+77000000+g*1009)
+            re_ranked=_rank(re_scored)
+            champion_metrics,champion=re_ranked[0]
+            in_sample=dict(ranked[0][0])
+            history.append({"generation":g+1,"sigma":sigma,"params":asdict(champion),
+                            "metrics":champion_metrics,"in_sample_metrics":in_sample})
+            print(f"gen={g+1:03d} fitness={champion_metrics['fitness']:.4f}±{champion_metrics.get('fitness_se',0.0):.4f} "
+                  f"top12={champion_metrics['top12_rate']:.3f} final={champion_metrics['final_rate']:.3f} "
+                  f"champ={champion_metrics['champion_rate']:.3f} avg_rank={champion_metrics['avg_rank']:.2f} "
+                  f"(in-sample best {in_sample['fitness']:.4f})", flush=True)
             hall.append(champion); hall=hall[-12:]
-            elite_n=max(3,population//4); elites=[p for _,p in ranked[:elite_n]]
             new=elites[:]
             while len(new)<population:
                 child=self.crossover(self.rng.choice(elites),self.rng.choice(elites)) if self.rng.random()<.65 else self.rng.choice(elites)
@@ -272,19 +400,38 @@ class StrategyTrainer:
             pop=new
             (ap/f"gen_{g+1:03d}.json").write_text(json.dumps({"generation":g+1,"champion":asdict(champion),"metrics":champion_metrics},ensure_ascii=False,indent=2),encoding="utf-8")
 
+        if re_ranked is None:
+            raise ValueError("fit() requires generations >= 1 (or an existing checkpoint to resume from)")
+
         # Elite Parameter Smoothing for maximum stability against variance
-        elite_candidates = [p for _, p in ranked[:max(3, population // 4)]]
+        elite_candidates = [p for _, p in re_ranked[:max(3, population // 4)]]
         avg_dict = {}
         for k in self.FIELDS:
             vals = [getattr(p, k) for p in elite_candidates]
             avg_dict[k] = sum(vals) / len(vals)
         stable_champion = StrategyParams(**avg_dict)
 
-        final_payload = (stable_champion, self._opponents(stable_champion, pop, hall, 999999), self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
+        # Held-out validation: opponents this population was never selected against.
+        final_payload = (stable_champion, self._holdout_pool(), self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
         final_metrics = _evaluate_worker(final_payload)
+        # Training-distribution reference, for the train/holdout gap.
+        train_payload = (stable_champion, self._draw_pool(pop, hall, self.seed*31337, self._train_profile_params),
+                         self.seed + 123456789, max(1, final_race), max(0, self.equity_samples))
+        train_metrics = _evaluate_worker(train_payload)
         final_champ = stable_champion if final_metrics["fitness"] >= 0.70 or final_metrics["fitness"] >= champion_metrics["fitness"] * 0.90 else champion
 
-        print(f"[Training] 完成本轮演化 (累计到达 Gen {start_gen + generations}). 独立验证指标: {final_metrics}", flush=True)
+        print(f"[Training] 完成本轮演化 (累计到达 Gen {start_gen + generations}).", flush=True)
+        print(f"[Training] 留出集验证 fitness={final_metrics['fitness']:.4f}±{final_metrics.get('fitness_se',0.0):.4f} "
+              f"top12={final_metrics['top12_rate']:.3f} avg_rank={final_metrics['avg_rank']:.2f}", flush=True)
+        # NOTE: this is a *different field*, not a like-for-like overfitting gap. The
+        # training pool is padded with the evolved population and the hall of fame
+        # (strong), while the holdout pool is fixed profiles plus perturbed archetypes.
+        # Read the holdout number on its own as the unbiased estimate; the training
+        # number only says how the champion fares against the field it was selected in.
+        print(f"[Training] 训练分布参考 fitness={train_metrics['fitness']:.4f} "
+              f"top12={train_metrics['top12_rate']:.3f} (对手池含进化种群与名人堂，强度不同，不可直接与留出集相减)", flush=True)
         out=Path(save); out.parent.mkdir(parents=True,exist_ok=True)
-        out.write_text(json.dumps({"version":4,"params":asdict(final_champ),"training_metrics":champion_metrics,"final_race":final_metrics,"history":history},ensure_ascii=False,indent=2),encoding="utf-8")
-        return final_champ,{"training":history,"final_race":final_metrics}
+        out.write_text(json.dumps({"version":5,"params":asdict(final_champ),"training_metrics":champion_metrics,
+                                   "final_race":final_metrics,"train_race":train_metrics,"history":history},
+                                  ensure_ascii=False,indent=2),encoding="utf-8")
+        return final_champ,{"training":history,"final_race":final_metrics,"train_race":train_metrics}

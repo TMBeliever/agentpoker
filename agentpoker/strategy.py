@@ -4,6 +4,7 @@ from pathlib import Path
 import json, math, random
 from typing import Any
 from .cards import parse_card, full_hand_rank, equity_exact, evaluate_relative_strength
+from .calibration import preflop_percentile, strength_to_equity
 
 @dataclass
 class StrategyParams:
@@ -97,7 +98,12 @@ class StrategyAgent:
         self.rng = random.Random(seed)
         self.name = name
         self.opponents: dict[str, OpponentStats] = {}
-        self._seen_hands: set[str] = set()
+        self._obs_hand_id: Any = None
+        self._obs_cursor: int = 0
+        self._vpip_seen: set[str] = set()
+        # Whether hero raised preflop this hand -- needed to tell a continuation bet
+        # (sized by cbet_size) from an ordinary postflop value bet.
+        self._hero_is_aggressor: bool = False
         if profiles is not None:
             self.load_opponent_profiles(profiles)
 
@@ -221,6 +227,16 @@ class StrategyAgent:
         texture = self._board_texture(board)
         facing_bet = call > 0
         strength = equity
+        street = len(board)
+        # Flop bet after hero raised preflop is a continuation bet, priced by cbet_size.
+        is_cbet = self._hero_is_aggressor and street == 3
+        # Street-specific aggression frequency drives barrelling.
+        if street == 4:
+            aggression_freq = self.params.turn_barrel_frequency
+        elif street >= 5:
+            aggression_freq = max(self.params.river_bluff_frequency, 0.10)
+        else:
+            aggression_freq = self.params.cbet_frequency
 
         # Opponent profile adjustments
         fold_edge = pot_odds - 0.045
@@ -248,7 +264,7 @@ class StrategyAgent:
             if "raise" in legal and self._should_aggress(self.params.raise_threshold + 0.04 * texture["wetness"], pressure, strength):
                 return self._sized_raise(legal, strength=strength, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size)
             if "bet" in legal and self._should_aggress(0.55, pressure, strength):
-                return self._sized_bet(legal, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size)
+                return self._sized_bet(legal, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, street=street, is_cbet=is_cbet)
             if "call" in legal:
                 return {"type": "call"}
             if "check" in legal:
@@ -258,16 +274,19 @@ class StrategyAgent:
         draw_bias = texture["draws"]
         semi_threshold = max(0.29, pot_odds * 0.80)
         if strength >= semi_threshold and (draw_bias > 0 or strength > self.params.thin_value_threshold):
-            semi_cbet = self.params.cbet_frequency * (0.65 + 0.5 * pressure)
+            semi_cbet = aggression_freq * (0.65 + 0.5 * pressure)
             if villain.get("fold", 0.52) > 0.58:
                 semi_cbet *= 1.25
-            if "raise" in legal and self._noise(semi_cbet):
+            if ("raise" in legal or "bet" in legal) and self._noise(semi_cbet):
+                # _sized_raise picks the right action type for the spot (bet when first
+                # to act, raise when facing one).
                 return self._sized_raise(legal, strength=strength, value=False, pressure=pressure, pot=pot, bb_size=bb_size)
             if "call" in legal and strength >= pot_odds * 0.88:
                 return {"type": "call"}
 
         # Controlled bluffs (heavily suppressed against stations, boosted against high-folders)
-        bluff_rate = self.params.river_bluff_frequency if len(board) >= 5 else self.params.cbet_frequency * 0.18
+        # A turn barrel is a real decision the genome makes, not a rescaling of the flop.
+        bluff_rate = self.params.river_bluff_frequency if street >= 5 else aggression_freq * 0.18
         bluff_rate *= (1.0 + pressure * 0.65)
         if villain.get("is_station"):
             bluff_rate *= 0.15  # Never bluff a calling station
@@ -301,9 +320,9 @@ class StrategyAgent:
 
     def _preflop(self, legal: dict[str, Any], hero: list[Any], obs: dict[str, Any], pressure: float, villain: dict[str, Any]) -> dict[str, Any]:
         a, b = sorted([c.rank for c in hero], reverse=True)
-        suited = hero[0].suit == hero[1].suit
         pair = a == b
-        gap = a - b
+        # Percentile among the 169 starting-hand classes: suitedness and connectedness are
+        # already priced into it, so they no longer need separate threshold tweaks.
         score = self._preflop_strength(hero)
         pot = float(obs.get("pot", 0) or 0)
         call = float(legal.get("call", 0) or 0)
@@ -311,7 +330,7 @@ class StrategyAgent:
         is_opening = call <= bb_size * 1.05 and pot <= 3.5 * bb_size
 
         # Position analysis
-        pos_tag, pos_mult, is_steal = self._preflop_position_factor(obs)
+        _pos_tag, pos_mult, is_steal = self._preflop_position_factor(obs)
 
         # Short-stack Push/Fold logic (ICM / shallow stack <= 12 BB)
         hero_stack = float(obs.get("stack", 0) or 0)
@@ -319,9 +338,21 @@ class StrategyAgent:
 
         premium = pair and a >= 10 or (a >= 13 and b >= 11) or (a == 14 and b >= 10)
 
+        # Opponents already matching the current bet (hero excluded). One or more callers
+        # in front of a raise makes this a squeeze spot, not a cold three-bet.
+        callers = sum(
+            1 for p in (obs.get("players") or [])
+            if p.get("agentId") != obs.get("agentId")
+            and not p.get("folded")
+            and float(p.get("currentBet", 0) or 0) >= max(call, bb_size)
+        )
+        is_squeeze = (not is_opening) and callers >= 1
+
         if effective_bb <= 12.0:
-            push_threshold = 0.44 - 0.08 * pressure - (0.06 if is_steal else 0.0)
-            if premium or score >= push_threshold:
+            # Short-stack push/fold: the genome's VPIP sets how wide the shove is.
+            push_vpip = (0.18 + self.params.vpip * 0.6) - 0.10 * pressure + (0.10 if is_steal else 0.0)
+            push_vpip = max(0.05, min(0.75, push_vpip))
+            if premium or score >= 1.0 - push_vpip:
                 if "allIn" in legal:
                     return {"type": "allIn"}
                 if "raise" in legal:
@@ -333,12 +364,27 @@ class StrategyAgent:
             elif "fold" in legal:
                 return {"type": "fold"}
 
-        # Standard preflop ranges
-        playable_cut = (0.40 - 0.06 * pressure) / max(0.5, pos_mult)
-        playable = score >= playable_cut
+        # A VPIP target is a percentile bar: play the top `vpip` fraction of hands,
+        # loosened by position and tightened by tournament pressure.
+        vpip_target = self.params.vpip * (0.75 + 0.45 * pos_mult)
+        vpip_target *= (1.0 - 0.25 * max(0.0, pressure)) * (1.0 + 0.20 * max(0.0, -pressure))
+        if villain.get("is_station"):
+            vpip_target *= 0.90   # stations never fold, so speculative hands lose value
+        elif villain.get("is_nit") or villain.get("fold", 0.52) > 0.58:
+            vpip_target *= 1.10   # opponents over-fold: entering wider is cheap
+        vpip_target = max(0.03, min(0.95, vpip_target))
+        in_range = premium or score >= 1.0 - vpip_target
 
-        if "raise" in legal:
-            freq = (self.params.open_frequency if is_opening else self.params.threebet_frequency) * pos_mult
+        # "bet" is the opening wager when there is nothing to call (e.g. the big blind's
+        # option), so an opening raise must be offered for either key.
+        if "raise" in legal or "bet" in legal:
+            if is_opening:
+                freq = self.params.open_frequency
+            elif is_squeeze:
+                freq = self.params.squeeze_frequency
+            else:
+                freq = self.params.threebet_frequency
+            freq *= pos_mult
             if is_steal:
                 steal_freq = self.params.steal_frequency
                 if villain.get("fold", 0.52) > 0.58:
@@ -347,16 +393,14 @@ class StrategyAgent:
                     steal_freq *= 0.80
                 freq = max(freq, steal_freq)
             if premium:
+                self._hero_is_aggressor = True
                 return self._preflop_raise(legal, premium=True, bb_size=bb_size)
-            if playable and self._noise(freq * (1.0 + 0.4 * pressure)):
+            if in_range and self._noise(freq * (1.0 + 0.4 * pressure)):
+                self._hero_is_aggressor = True
                 return self._preflop_raise(legal, premium=False, bb_size=bb_size)
 
         if "call" in legal:
-            threshold = 0.31 - 0.04 * pressure
-            if suited: threshold -= 0.015
-            if gap <= 1: threshold -= 0.015
-            if pos_tag == "btn": threshold -= 0.02
-            if score >= threshold and (self._noise(0.92) or premium):
+            if in_range and (self._noise(0.92) or premium):
                 return {"type": "call"}
 
         if "check" in legal:
@@ -387,10 +431,18 @@ class StrategyAgent:
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _equity(self, hero: list[Any], board: list[Any], opponents: int) -> float:
+        """Win probability against `opponents` live hands.
+
+        The cheap path runs the heuristic evaluator and then maps its score through the
+        offline calibration table, so the returned number is a probability that can be
+        compared with pot odds and that accounts for how many players are still in.
+        Previously the raw heuristic score was compared against pot odds directly.
+        """
         samples = int(self.params.equity_samples)
-        if samples <= 0:
-            return evaluate_relative_strength(hero, board)["strength"]
-        return equity_exact(hero, board, max(1, opponents), samples, self.rng)
+        if samples > 0:
+            return equity_exact(hero, board, max(1, opponents), samples, self.rng)
+        raw = evaluate_relative_strength(hero, board)["strength"]
+        return strength_to_equity(len(board), opponents, raw)
 
     def _tournament_pressure(self, ctx: dict[str, Any]) -> float:
         rank = ctx.get("rank")
@@ -412,6 +464,10 @@ class StrategyAgent:
         if rem is not None:
             rem = max(0, int(rem))
             if rem <= 20:
+                # On the bubble (straddling the qualification line) how hard to press is
+                # a trait the genome chooses via bubble_aggression, not a constant.
+                if 10 <= rank <= 15:
+                    pressure += (self.params.bubble_aggression - 0.5) * 0.6
                 pressure += self.params.late_aggression if rank >= 13 else -0.05
             if rem <= 10:
                 pressure *= 1.20
@@ -433,7 +489,9 @@ class StrategyAgent:
             return {"type": action_type, "amount": hi}
         if strength >= self.params.jam_threshold and (pressure > 0.2 or value):
             return {"type": "allIn"} if "allIn" in legal else {"type": action_type, "amount": hi}
-        base = self.params.value_bet_size if value else self.params.bluff_bet_size
+        # raise_size is the genome's dedicated raise-sizing knob (previously dead: this
+        # branch read value_bet_size, so evolving raise_size changed nothing).
+        base = self.params.raise_size if value else self.params.bluff_bet_size
         frac = (base + 0.10 * max(0.0, pressure) + 0.12 * max(0.0, strength - 0.75)) * size_mult
         if pot > 0:
             target = int(lo + pot * frac * 0.5)
@@ -441,7 +499,7 @@ class StrategyAgent:
             target = int(lo + (hi - lo) * max(0.05, min(0.90, frac)))
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
-    def _sized_bet(self, legal: dict[str, Any], value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0) -> dict[str, Any]:
+    def _sized_bet(self, legal: dict[str, Any], value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0, street: int | None = None, is_cbet: bool = False) -> dict[str, Any]:
         spec = legal.get("bet", legal.get("raise"))
         if not spec:
             return {"type": "allIn"} if "allIn" in legal else ({"type": "check"} if "check" in legal else {"type": "call"})
@@ -451,7 +509,13 @@ class StrategyAgent:
             if "allIn" in legal:
                 return {"type": "allIn"}
             return {"type": action_type, "amount": hi}
-        frac = ((self.params.value_bet_size if value else self.params.bluff_bet_size) + 0.08 * max(0.0, pressure)) * size_mult
+        if is_cbet and street == 3:
+            # Continuation bet, sized by the genome's cbet_size knob (also previously
+            # dead -- flop c-bets were priced with value_bet_size).
+            base = self.params.cbet_size
+        else:
+            base = self.params.value_bet_size if value else self.params.bluff_bet_size
+        frac = (base + 0.08 * max(0.0, pressure)) * size_mult
         if pot > 0:
             target = int(max(pot * frac, bb_size))
         else:
@@ -473,18 +537,47 @@ class StrategyAgent:
         return {"wetness": 1.0 if flushish or connected else (0.5 if paired else 0.2), "draws": float(flushish) + float(connected)}
 
     def _observe_opponents(self, obs: dict[str, Any]) -> None:
+        """Fold newly observed actions into the opponent model.
+
+        Only actions appended since the previous decision are consumed (a per-hand
+        cursor), so each action is counted exactly once. Rescanning the full history on
+        every decision used to re-count every prior action -- one opponent accumulated
+        tens of thousands of phantom raises per tournament -- and made the simulator
+        quadratic in hand length.
+        """
         hero_id = obs.get("agentId")
         hand = obs.get("hand") or {}
-        actions = hand.get("actions") or obs.get("recent_actions") or []
-        for a in actions:
+        actions = obs.get("recent_actions")
+        if not actions:
+            actions = hand.get("actions") or []
+
+        hid = obs.get("hand_id")
+        new_hand = hid != self._obs_hand_id
+        # A shorter list than the cursor means a fresh hand with no usable hand_id.
+        if new_hand or len(actions) < self._obs_cursor:
+            self._obs_hand_id = hid
+            self._obs_cursor = 0
+            self._vpip_seen = set()
+            if new_hand:
+                self._hero_is_aggressor = False
+                for p in obs.get("players") or []:
+                    aid = p.get("agentId")
+                    if aid and aid != hero_id:
+                        self.opponents.setdefault(aid, OpponentStats()).hands += 1
+
+        cursor = min(self._obs_cursor, len(actions))
+        new_actions = actions[cursor:]
+        self._obs_cursor = len(actions)
+
+        for a in new_actions:
             aid = a.get("agentId")
             if not aid or aid == hero_id:
                 continue
-            stats = self.opponents.setdefault(aid, OpponentStats())
             typ = a.get("type")
             if typ in {"smallBlind", "bigBlind"}:
                 continue
-            if typ in {"raise", "bet"}:
+            stats = self.opponents.setdefault(aid, OpponentStats())
+            if typ in {"raise", "bet", "allIn"}:
                 stats.raises += 1
                 stats.bets += 1
             elif typ == "call":
@@ -493,10 +586,27 @@ class StrategyAgent:
                 stats.folds += 1
             elif typ == "check":
                 stats.checks += 1
+            else:
+                continue
+            # VPIP is a per-hand property: count the first voluntary money-in only.
+            if typ in {"raise", "bet", "allIn", "call"} and aid not in self._vpip_seen:
+                stats.vpip += 1
+                self._vpip_seen.add(aid)
             stats.last_seen += 1
 
     @staticmethod
     def _preflop_strength(hero: list[Any]) -> float:
+        """Starting-hand strength in [0, 1], 1 = strongest.
+
+        Prefers the calibrated percentile among the 169 starting-hand classes, which is
+        what lets a VPIP target mean "play the top X% of hands". Falls back to a rescaled
+        version of the old raw score if the calibration table is unavailable -- the old
+        score compressed almost every hand above 0.31, which is why every archetype
+        ended up playing roughly the same (very wide) range.
+        """
+        pct = preflop_percentile(hero)
+        if pct is not None:
+            return pct
         a, b = sorted([c.rank for c in hero], reverse=True)
         score = (a + b) / 28.0
         if a == b: score += 0.30
@@ -504,7 +614,7 @@ class StrategyAgent:
         if a - b <= 2: score += 0.045
         if a >= 13 and b >= 10: score += 0.11
         if a == 14: score += 0.04
-        return min(1.0, score)
+        return max(0.0, min(1.0, (score - 0.30) / 0.70))
 
     def _choose_remote(self, obs: dict[str, Any]) -> dict[str, Any]:
         req = obs.get("actionRequest") or {}

@@ -6,6 +6,7 @@ from .protocol import AgentPokerClient, APIError, Config
 from .strategy import StrategyAgent
 from .collector import JSONLCollector
 from .profiler import OpponentProfiler
+from .context import context_from_standings, synthetic_context
 
 class LiveRunner:
     def __init__(
@@ -48,6 +49,7 @@ class LiveRunner:
         self.prev_hand_id: str | None = None
         self.hand_start_stack: int | None = None
         self.last_completed_hand_obj: dict[str, Any] | None = None
+        self._standings_rows: list[dict[str, Any]] = []
 
         if not self.cid:
             raise ValueError('AGENTPOKER_COMPETITION_ID is required for live mode')
@@ -220,6 +222,7 @@ class LiveRunner:
 
         if self.auto_profile:
             self._update_and_reload_profiles()
+        self._refresh_standings()
 
         print("=" * 68 + "\n", flush=True)
 
@@ -310,32 +313,38 @@ class LiveRunner:
                 return self.client.observe(self.cid)
             raise
 
-    def _make_action_body(self, obs: dict[str, Any]) -> dict[str, Any]:
-        # Construct & inject virtual tournament context
+    def _tournament_context(self, hero_id: str | None = None) -> dict[str, Any]:
+        """Context for the current decision, via the shared builder.
+
+        Prefers real standings when the API exposes a usable BB/100 ranking, and
+        otherwise infers a rank through the same calibrated ladder the simulator's
+        ranks came from. The previous five-bucket ladder with hardcoded 20.0 / 15.0
+        golden lines did not match the distribution the policy was trained on.
+        """
         hands_in_cycle = self.total_hands_played % self.cycle_hands
         rem = max(0, self.cycle_hands - hands_in_cycle)
         cycle_bb100 = (self.cycle_net_bb / max(1, hands_in_cycle)) * 100.0 if hands_in_cycle > 0 else 0.0
 
-        if cycle_bb100 >= 50.0:
-            sim_rank = 3
-        elif cycle_bb100 >= 25.0:
-            sim_rank = 8
-        elif cycle_bb100 >= 15.0:
-            sim_rank = 12
-        elif cycle_bb100 >= 0.0:
-            sim_rank = 16
-        else:
-            sim_rank = 21
+        ctx = None
+        if self._standings_rows:
+            ctx = context_from_standings(self._standings_rows, hero_id,
+                                         rem, self.current_round, self.current_cycle)
+        if ctx is None:
+            ctx = synthetic_context(cycle_bb100, rem, self.current_round, self.current_cycle)
+        return ctx
 
-        obs["tournamentContext"] = {
-            "rank": sim_rank,
-            "bb100": cycle_bb100,
-            "rank12_bb100": 20.0,
-            "rank13_bb100": 15.0,
-            "hands_remaining": rem,
-            "round_no": self.current_round,
-            "cycle_no": self.current_cycle,
-        }
+    def _refresh_standings(self) -> None:
+        """Best-effort standings refresh; failures leave the synthetic ladder in place."""
+        try:
+            data = self.client.standings(self.cid)
+        except Exception:
+            self._standings_rows = []
+            return
+        rows = data.get("standings") or data.get("rows") or data.get("competitors") or []
+        self._standings_rows = rows if isinstance(rows, list) else []
+
+    def _make_action_body(self, obs: dict[str, Any]) -> dict[str, Any]:
+        obs["tournamentContext"] = self._tournament_context(obs.get("agentId"))
 
         req = copy.deepcopy(obs['actionRequest'])
         decision = self.strategy.choose(obs)

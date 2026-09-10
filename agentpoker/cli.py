@@ -106,6 +106,8 @@ def main():
     t.add_argument('--save',default=None,help='Output model path')
     t.add_argument('--archive',default=None,help='Generations archive directory')
     t.add_argument('--no-resume',dest='resume',action='store_false',default=True,help='Disable resuming from existing archive checkpoints')
+    t.add_argument('--reeval-runs',type=int,default=24,help='Fresh-seed tournaments used to re-score the generation shortlist before crowning a champion')
+    t.add_argument('--holdout-frac',type=float,default=0.25,help='Fraction of real opponent profiles held out of training and used only for final validation')
     e=sub.add_parser('evaluate'); e.add_argument('--strategy',default='models/champion.json'); e.add_argument('--runs',type=int,default=500); e.add_argument('--agents',type=int,default=36); e.add_argument('--equity-samples',type=int,default=0); e.add_argument('--profiles',default=None); e.add_argument('--workers',type=int,default=0)
     l=sub.add_parser('live')
     l.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'))
@@ -157,8 +159,8 @@ def main():
             print(f"[Train] === 启动【通用自演化基石轨 (Universal)】===")
             print(f"[Train] 无特定画像偏见 | 模型保存: {save_path} | 归档: {archive_dir}")
 
-        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src)
-        champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume)
+        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src, holdout_frac=args.holdout_frac)
+        champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume, reeval_runs=args.reeval_runs)
         
         if track == 'universal' and save_path == 'models/champion_universal.json':
             try:
