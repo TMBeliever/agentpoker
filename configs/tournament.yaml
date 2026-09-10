@@ -1,0 +1,8 @@
+small_blind: 100
+big_blind: 200
+seats: 6
+preliminary_rounds: 10
+hands_per_round: 20
+minimum_completion: 0.80
+semifinal_hands: 20
+final_hands: 30
