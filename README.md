@@ -116,18 +116,43 @@ uv run python -m agentpoker.cli live \
 - `--max-hands 100`：打满指定手数自动离桌（默认 0 为无限连打）
 - `--no-auto-profile`：关闭每轮自动更新画像
 
-### 3. 自训练演化（锦标赛多代进化）
+### 3. 双轨自训练演化（支持无缝断点续训）
+
+训练系统采用**双轨分立架构**，保证通用底蕴与赛场定向收割互不干扰：
+
+#### 轨 1：通用自演化基石轨（Universal Track）
+- **定位**：不带任何特定选手偏见，在全流派（松凶、紧凶、跟注站、岩石怪等）平衡博弈对抗中淬炼。
+- **自动断点续训**：检测 `models/archive_universal/` 已有的 Gen 1~4 存档，自动从 **Gen 5** 继续演化。
+- **保存目标**：`models/champion_universal.json`（自动软同步更新 `models/champion.json`）。
 
 ```bash
+# 续训通用基石模型（多核并行，从第 5 代向后继续进化 5 代）
 uv run python -m agentpoker.cli train \
-  --generations 10 \
+  --track universal \
+  --generations 5 \
   --population 12 \
   --runs 6 \
   --agents 24 \
-  --workers 8 \
-  --final-race 40 \
-  --save models/champion.json
+  --workers 8
 ```
+
+#### 轨 2：赛场真实画像特训收割轨（Targeted Track）
+- **定位**：将真实 S10 赛场清洗出的 59 名活跃选手画像直接注入对手池，针对赛场普遍高频的激进偷盲、松散跟注与极度弃牌特征进行专门定向收割与反制。
+- **独立存档**： Checkpoint 独立保存在 `models/archive_targeted/`，输出模型为 `models/champion_targeted.json`。
+
+```bash
+# 启动针对 S10 真实画像的定向特训演化（多核并行）
+uv run python -m agentpoker.cli train \
+  --track targeted \
+  --profiles models/opponent_profiles.json \
+  --generations 5 \
+  --population 12 \
+  --runs 6 \
+  --agents 24 \
+  --workers 8
+```
+
+> **提示**：训练默认开启 `--resume`（自动断点续训）。若需清空历史从第 1 代全新演化，可追加 `--no-resume`。
 
 ### 4. 数据提取与对手画像重构
 
@@ -150,20 +175,23 @@ agentpoker/
   engine.py       本地 NLHE 快速仿真研究引擎
   strategy.py     自适应博弈策略（位置加权、画像剥削、短码推推乐、气泡期压制）
   tournament.py   瑞士制 10 轮 + 双桌半决赛 + 6 人总决赛赛制仿真器
-  training.py     多核遗传算法策略训练器与 ArenaEvaluator 考评系统
+  training.py     多核遗传算法策略训练器与 ArenaEvaluator 考评系统（支持断点续训与画像注入）
   profiler.py     对手历史对局画像提取与清洗器（贝叶斯平滑）
   live.py         线上实战驱动（原地 20 手切轮、200 手赛季飞轮、画像热重载）
   protocol.py     HTTP API 通信客户端与自动重试机制
   cli.py          命令行总入口
 
 models/
-  champion.json             经过 4 代严酷演化的最优冠军策略参数
+  champion.json             线上默认挂载的最优冠军策略
+  champion_universal.json   通用自演化基石冠军模型
+  champion_targeted.json    针对真实选手画像的定向特训冠军模型
   opponent_profiles.json    清洗后的 59 位 S10 真实选手高质量画像库
-  archive/                  历代演化 Checkpoint (gen_001.json ~ gen_004.json)
+  archive_universal/        通用轨历代演化 Checkpoint (gen_001.json ~ gen_004.json ...)
+  archive_targeted/         画像特训轨独立演化 Checkpoint
 
 data/
   processed/hands.jsonl     S10 真实采集的 4,583 手对局全量数据
   raw/events.jsonl          线上对局实时采集流水
 
-tests/                      全套自动化单元测试（13 项覆盖 100% 通过）
+tests/                      全套自动化单元测试（16 项覆盖 100% 通过）
 ```

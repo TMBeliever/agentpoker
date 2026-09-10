@@ -93,7 +93,19 @@ def run_connect(base_url: str = "https://poker.bang.sohu.com") -> None:
 def main():
     p=argparse.ArgumentParser(prog='agentpoker'); sub=p.add_subparsers(dest='cmd',required=True)
     s=sub.add_parser('simulate'); s.add_argument('--agents',type=int,default=36); s.add_argument('--runs',type=int,default=10); s.add_argument('--seed',type=int,default=7)
-    t=sub.add_parser('train'); t.add_argument('--generations',type=int,default=30); t.add_argument('--population',type=int,default=16); t.add_argument('--runs',type=int,default=30); t.add_argument('--final-race',type=int,default=500); t.add_argument('--agents',type=int,default=36); t.add_argument('--equity-samples',type=int,default=0); t.add_argument('--workers',type=int,default=0); t.add_argument('--save',default='models/champion.json')
+    t=sub.add_parser('train')
+    t.add_argument('--track',choices=['universal','targeted'],default=None,help='Training track: universal (general robust GTO) or targeted (real opponent profiling)')
+    t.add_argument('--generations',type=int,default=10)
+    t.add_argument('--population',type=int,default=16)
+    t.add_argument('--runs',type=int,default=10)
+    t.add_argument('--final-race',type=int,default=40)
+    t.add_argument('--agents',type=int,default=24)
+    t.add_argument('--equity-samples',type=int,default=0)
+    t.add_argument('--workers',type=int,default=0)
+    t.add_argument('--profiles',default=None,help='Opponent profiles for targeted training')
+    t.add_argument('--save',default=None,help='Output model path')
+    t.add_argument('--archive',default=None,help='Generations archive directory')
+    t.add_argument('--no-resume',dest='resume',action='store_false',default=True,help='Disable resuming from existing archive checkpoints')
     e=sub.add_parser('evaluate'); e.add_argument('--strategy',default='models/champion.json'); e.add_argument('--runs',type=int,default=500); e.add_argument('--agents',type=int,default=36); e.add_argument('--equity-samples',type=int,default=0); e.add_argument('--profiles',default=None); e.add_argument('--workers',type=int,default=0)
     l=sub.add_parser('live')
     l.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'))
@@ -128,7 +140,32 @@ def main():
         for run in range(args.runs):
             sim=LeagueSimulator(agents,seed=args.seed+run*10007); r=sim.run_event(); print(f'run={run+1} top12={[x.agent_id for x in r["qualified"][:12]]} champion={r["final"][0].agent_id if r["final"] else None}')
     elif args.cmd=='train':
-        trainer=StrategyTrainer(seed=7,pool_size=args.agents,equity_samples=args.equity_samples,workers=args.workers); trainer.fit(args.generations,args.population,args.runs,args.save,final_race=args.final_race); print(f'saved {args.save}')
+        track = args.track
+        if track is None:
+            track = 'targeted' if args.profiles else 'universal'
+
+        if track == 'targeted':
+            save_path = args.save or 'models/champion_targeted.json'
+            archive_dir = args.archive or 'models/archive_targeted'
+            profiles_src = args.profiles or 'models/opponent_profiles.json'
+            print(f"[Train] === 启动【赛场特训收割轨 (Targeted)】===")
+            print(f"[Train] 挂载对手画像: {profiles_src} | 模型保存: {save_path} | 归档: {archive_dir}")
+        else:
+            save_path = args.save or 'models/champion_universal.json'
+            archive_dir = args.archive or 'models/archive_universal'
+            profiles_src = None
+            print(f"[Train] === 启动【通用自演化基石轨 (Universal)】===")
+            print(f"[Train] 无特定画像偏见 | 模型保存: {save_path} | 归档: {archive_dir}")
+
+        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src)
+        champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume)
+        
+        if track == 'universal' and save_path == 'models/champion_universal.json':
+            try:
+                Path('models/champion.json').write_text(Path(save_path).read_text(encoding='utf-8'), encoding='utf-8')
+            except Exception:
+                pass
+        print(f"[Train] 训练完成！已成功保存到 {save_path}")
     elif args.cmd=='evaluate':
         pth=StrategyAgent.load(args.strategy).params
         r=ArenaEvaluator(pool_size=args.agents,equity_samples=args.equity_samples,profiles=args.profiles,workers=args.workers).evaluate(pth,runs=args.runs,seed_offset=9911,verbose=True)

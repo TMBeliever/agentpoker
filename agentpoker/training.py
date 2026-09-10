@@ -163,8 +163,13 @@ class ArenaEvaluator:
 class StrategyTrainer:
     """Full population strategy evolution: crossover + mutation + cross-play + racing."""
     FIELDS=tuple(k for k in asdict(StrategyParams()).keys() if k!="equity_samples")
-    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0):
+    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None):
         self.rng=random.Random(seed); self.seed=seed; self.pool_size=max(12,pool_size); self.equity_samples=equity_samples; self.workers=workers
+        self.profiles=profiles
+        self._cached_profile_params = []
+        if self.profiles:
+            profs = ArenaEvaluator._load_profiles(self.profiles)
+            self._cached_profile_params = [profile_to_params(p) for p in profs]
 
     def mutate(self,p,sigma):
         d=asdict(p)
@@ -191,6 +196,8 @@ class StrategyTrainer:
 
     def _opponents(self, focal, population, hall, seed):
         candidates=[]
+        if self._cached_profile_params:
+            candidates.extend(self._cached_profile_params)
         candidates.extend(ARCHETYPES.values()); candidates.extend(population); candidates.extend(hall)
         out=[]
         self.rng.seed(seed)
@@ -215,10 +222,41 @@ class StrategyTrainer:
             for fut in as_completed(futs): results[futs[fut]]=fut.result()
         return list(zip(results,pop))
 
-    def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500):
-        pop=self.seed_population(population); hall=[]; history=[]; champion=None; champion_metrics=None
+    def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True):
         ap=Path(archive); ap.mkdir(parents=True,exist_ok=True)
-        for g in range(generations):
+        start_gen=0; history=[]; hall=[]; champion=None; champion_metrics=None
+
+        if resume:
+            gen_files = sorted(ap.glob("gen_*.json"))
+            for gf in gen_files:
+                try:
+                    d = json.loads(gf.read_text(encoding="utf-8"))
+                    g_num = d.get("generation")
+                    if g_num and "champion" in d and "metrics" in d:
+                        history.append({
+                            "generation": g_num,
+                            "sigma": max(.012, .075 * (.92 ** (g_num - 1))),
+                            "params": d["champion"],
+                            "metrics": d["metrics"]
+                        })
+                        hall.append(StrategyParams(**d["champion"]))
+                except Exception:
+                    pass
+            if history:
+                start_gen = history[-1]["generation"]
+                champion = StrategyParams(**history[-1]["params"])
+                champion_metrics = history[-1]["metrics"]
+                hall = hall[-12:]
+                print(f"[Training] 发现历史存档！从 Generation {start_gen} 自动恢复续训 (已有历史: {len(history)} 代, 当前最强 Fitness: {champion_metrics['fitness']:.4f})", flush=True)
+
+        if champion is not None:
+            pop = [replace(champion)]
+            while len(pop) < population:
+                pop.append(self.mutate(champion, max(.02, .075 * (.92 ** start_gen))))
+        else:
+            pop = self.seed_population(population)
+
+        for g in range(start_gen, start_gen + generations):
             sigma=max(.012,.075*(.92**g))
             scored=self._score_population(pop,hall,g,runs_per_candidate)
             ranked=sorted(((m,p) for m,p in scored),key=lambda x:(x[0]["fitness"],x[0]["top12_rate"],x[0]["champion_rate"],-x[0]["avg_rank"]),reverse=True)
@@ -242,11 +280,11 @@ class StrategyTrainer:
             avg_dict[k] = sum(vals) / len(vals)
         stable_champion = StrategyParams(**avg_dict)
 
-        final_payload = (stable_champion, self._opponents(stable_champion, pop, hall, 999999), self.seed + 987654321, max(20, final_race), max(0, self.equity_samples))
+        final_payload = (stable_champion, self._opponents(stable_champion, pop, hall, 999999), self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
         final_metrics = _evaluate_worker(final_payload)
         final_champ = stable_champion if final_metrics["fitness"] >= 0.70 or final_metrics["fitness"] >= champion_metrics["fitness"] * 0.90 else champion
 
-        print(f"[Training] Completed {generations} generations. Final race validation: {final_metrics}", flush=True)
+        print(f"[Training] 完成本轮演化 (累计到达 Gen {start_gen + generations}). 独立验证指标: {final_metrics}", flush=True)
         out=Path(save); out.parent.mkdir(parents=True,exist_ok=True)
         out.write_text(json.dumps({"version":4,"params":asdict(final_champ),"training_metrics":champion_metrics,"final_race":final_metrics,"history":history},ensure_ascii=False,indent=2),encoding="utf-8")
         return final_champ,{"training":history,"final_race":final_metrics}
