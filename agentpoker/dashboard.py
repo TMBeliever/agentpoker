@@ -321,13 +321,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <main class="max-w-7xl mx-auto px-4 py-6">
     <!-- Navigation Tabs -->
     <div class="flex border-b border-slate-800 mb-6 space-x-6 text-sm font-medium">
-      <button onclick="switchTab("tabTrain")" id="tabBtnTrain" class="pb-3 border-b-2 border-emerald-500 text-emerald-400 flex items-center gap-2">
+      <button onclick="switchTab('tabTrain')" id="tabBtnTrain" class="pb-3 border-b-2 border-emerald-500 text-emerald-400 flex items-center gap-2">
         <i class="fa-solid fa-dumbbell"></i> 演化训练控制
       </button>
-      <button onclick="switchTab("tabLive")" id="tabBtnLive" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+      <button onclick="switchTab('tabLive')" id="tabBtnLive" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
         <i class="fa-solid fa-trophy"></i> 在线赛事实战
       </button>
-      <button onclick="switchTab("tabHands")" id="tabBtnHands" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+      <button onclick="switchTab('tabHands')" id="tabBtnHands" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
         <i class="fa-solid fa-clock-rotate-left"></i> 对局复盘观战
       </button>
     </div>
@@ -613,6 +613,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function updateChart(archive) {
+      if (typeof Chart === 'undefined') return;
       const labels = archive.map(a => `Gen ${a.generation}`);
       const fitnessData = archive.map(a => a.fitness);
       const bbData = archive.map(a => a.avg_bb100);
@@ -808,6 +809,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     window.onload = () => {
       loadModels();
       fetchStatus();
+      loadHands();
       refreshLogs();
       setInterval(fetchStatus, 3000);
       setInterval(refreshLogs, 4000);
@@ -825,10 +827,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path in ("/", "/index.html"):
+            b = HTML_TEMPLATE.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(b)))
             self.end_headers()
-            self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
+            self.wfile.write(b)
             return
 
         if path == "/api/status":
@@ -890,18 +894,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send_json(self, obj: Any):
+        b = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(b)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+        self.wfile.write(b)
 
     def _send_text(self, text: str):
+        b = text.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(b)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(text.encode("utf-8"))
+        self.wfile.write(b)
 
 def run_server(host: str = "0.0.0.0", port: int = 8080):
     server = ThreadingHTTPServer((host, port), DashboardHandler)
