@@ -1359,7 +1359,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     async function startTrain() {
       const oppMode = document.getElementById("selOppMode").value;
       if ((oppMode === "pure_human" || oppMode === "mix") && selectedProfileIds.size === 0) {
-        alert("⚠️ 当前对手池包含真人画像，但您未勾选任何参训选手！\n请在【自定义参训真实选手】中勾选至少 1 位选手，或将对手池切换为纯经典原型池。");
+        alert(`⚠️ 当前对手池包含真人画像，但您未勾选任何参训选手！\n请在【自定义参训真实选手】中勾选至少 1 位选手，或将对手池切换为纯经典原型池。`);
         return;
       }
 
