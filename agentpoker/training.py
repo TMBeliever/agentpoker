@@ -234,7 +234,7 @@ class ArenaEvaluator:
             return _evaluate_worker((focal, opponents, self.seed+seed_offset, max(1,runs), self.equity_samples, verbose))
 
     @staticmethod
-    def _load_profiles(source: dict[str, Any] | str | Path, min_hands: int = 15) -> list[dict[str, Any]]:
+    def _load_profiles(source: dict[str, Any] | str | Path, min_hands: int = 15, top_n: int | None = None) -> list[dict[str, Any]]:
         if isinstance(source, (str, Path)):
             p = Path(source)
             if not p.exists(): return []
@@ -243,6 +243,8 @@ class ArenaEvaluator:
         else: return []
         valid = [v for v in data.values() if isinstance(v, dict) and v.get("hands", 0) >= min_hands]
         valid.sort(key=lambda x: x.get("hands", 0), reverse=True)
+        if top_n is not None and top_n > 0:
+            valid = valid[:top_n]
         return valid
 
 class StrategyTrainer:
@@ -250,15 +252,16 @@ class StrategyTrainer:
     FIELDS=tuple(k for k in asdict(StrategyParams()).keys() if k!="equity_samples")
     HALL_SIZE=12
     def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25,
-                 profile_min_hands=15, profile_share=0.5):
+                 profile_min_hands=15, profile_share=0.5, profile_top: int | None = None):
         self.rng=random.Random(seed); self.seed=seed; self.pool_size=max(12,pool_size); self.equity_samples=equity_samples; self.workers=workers
         self.profiles=profiles
         self.holdout_frac=min(0.5, max(0.0, float(holdout_frac)))
         self.profile_min_hands=int(profile_min_hands)
         self.profile_share=min(1.0, max(0.0, float(profile_share)))
+        self.profile_top=int(profile_top) if profile_top is not None else None
         self._cached_profile_params = []
         if self.profiles:
-            profs = ArenaEvaluator._load_profiles(self.profiles, self.profile_min_hands)
+            profs = ArenaEvaluator._load_profiles(self.profiles, self.profile_min_hands, self.profile_top)
             self._cached_profile_params = [profile_to_params(p) for p in profs]
         self.n_profiles_loaded = len(self._cached_profile_params)
         self._build_holdout()

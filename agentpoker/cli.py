@@ -109,6 +109,7 @@ def main():
     t.add_argument('--profiles',default=None,help='对手画像文件路径。targeted 轨默认 models/opponent_profiles.json')
     t.add_argument('--mix-profiles',dest='mix_profiles',action='store_true',help='通用训练中混入优质真实画像（与原型共同组成对手池）。不加则保持纯原型训练')
     t.add_argument('--profile-min-hands',type=int,default=100,help='画像质量门槛：手数低于此值不采用，用于剔除小样本噪声画像（默认 100 手）')
+    t.add_argument('--profile-top',type=int,default=None,help='只选取手牌数排名前 N 的优质画像（如 36 位主力）')
     t.add_argument('--profile-share',type=float,default=0.5,help='画像在对手池中最多占的座位比例，其余留给原型+种群+名人堂（默认 0.5，即画像最多占一半）')
     t.add_argument('--save',default=None,help='冠军模型输出路径')
     t.add_argument('--archive',default=None,help='各代存档目录，用于断点续训')
@@ -203,7 +204,7 @@ def main():
                 print(f"[Train] 纯原型模式 (未启用 --mix-profiles，无真实画像偏见)")
             print(f"[Train] 模型保存: {save_path} | 归档: {archive_dir}")
 
-        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands, profile_share=args.profile_share)
+        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands, profile_share=args.profile_share, profile_top=args.profile_top)
         if profiles_src:
             n_prof = trainer.n_profiles_loaded
             print(f"[Train] 画像质量筛选: {n_prof} 位通过门槛 (>={args.profile_min_hands} 手)")
