@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import asdict, replace
 from pathlib import Path
-import json, math, random, statistics
+import json, math, os, random, statistics
 from typing import Any
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from .strategy import StrategyAgent, StrategyParams
@@ -19,16 +19,21 @@ ARCHETYPES = {
 def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
     """Aggregate per-run outcomes into fitness plus its own uncertainty.
 
-    Reporting a bare point estimate hides the fact that with a handful of tournament
-    runs the fitness differences between generations are pure noise, so the standard
-    error and a 95% interval travel with every result.
+    Championship-first weighting:
+    - 45% champion rate
+    - 25% final table rate
+    - 20% top 12 qualification rate
+    - 5% normalized rank
+    - 5% normalized BB/100 (rewards positive profit, penalizes blind bleeding)
     """
     runs = max(1, runs)
     top_rate, final_rate, champ_rate = top / runs, final / runs, champ / runs
     avg_rank = sum(ranks) / runs
     avg_bb = sum(bbs) / runs
-    fit = (.58 * top_rate + .22 * final_rate + .15 * champ_rate
-           + .05 * (1.0 - min(avg_rank - 1, pool - 1) / (pool - 1)))
+    bb_factor = 1.0 / (1.0 + math.exp(-max(-200.0, min(200.0, avg_bb)) / 40.0))
+    fit = (.20 * top_rate + .25 * final_rate + .45 * champ_rate
+           + .05 * (1.0 - min(avg_rank - 1, pool - 1) / (pool - 1))
+           + .05 * bb_factor)
 
     def var_prop(p):  # Var of a proportion over `runs` independent tournaments
         return p * (1.0 - p) / runs
@@ -36,11 +41,11 @@ def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
     def cov(p1, p2):  # nested events: P(A and B) = min(p1, p2)
         return (min(p1, p2) - p1 * p2) / runs
 
-    var = (.58 ** 2) * var_prop(top_rate) + (.22 ** 2) * var_prop(final_rate) \
-        + (.15 ** 2) * var_prop(champ_rate) \
-        + 2 * .58 * .22 * cov(top_rate, final_rate) \
-        + 2 * .58 * .15 * cov(top_rate, champ_rate) \
-        + 2 * .22 * .15 * cov(final_rate, champ_rate)
+    var = (.20 ** 2) * var_prop(top_rate) + (.25 ** 2) * var_prop(final_rate) \
+        + (.45 ** 2) * var_prop(champ_rate) \
+        + 2 * .20 * .25 * cov(top_rate, final_rate) \
+        + 2 * .20 * .45 * cov(top_rate, champ_rate) \
+        + 2 * .25 * .45 * cov(final_rate, champ_rate)
     if runs > 1 and len(ranks) > 1:
         var += (.05 / (pool - 1)) ** 2 * (statistics.variance(ranks) / runs)
     se = math.sqrt(max(0.0, var))
@@ -178,15 +183,22 @@ class ArenaEvaluator:
             if not opponents:
                 base=list(ARCHETYPES.values())
                 opponents=[base[i % len(base)] for i in range(self.pool_size-1)]
+        else:
+            opponents = list(opponents)
+            while len(opponents) < self.pool_size - 1:
+                opponents.extend([replace(x) for x in opponents])
+            opponents = opponents[:self.pool_size - 1]
         opponents = [replace(x) for x in opponents]
 
-        if self.workers and self.workers > 1 and runs > 1:
-            workers = min(self.workers, runs)
+        workers = self.workers or (os.cpu_count() or 4)
+        if workers > 1 and runs > 1:
+            workers = min(workers, runs)
             tasks = [(focal, opponents, self.seed + seed_offset + r * 7919, 1, self.equity_samples, False) for r in range(runs)]
             top = final = champ = 0
             rank_sum = bb_sum = 0.0
             ranks: list[float] = []; bbs: list[float] = []
-            print(f"[评估开始] 正在启动 {runs} 场锦标赛 (多核并发: {workers} 个工作进程)...", flush=True)
+            if verbose:
+                print(f"[评估开始] 正在启动 {runs} 场锦标赛 (多核并发: {workers} 个工作进程)...", flush=True)
             with ProcessPoolExecutor(max_workers=workers) as ex:
                 futs = {ex.submit(_evaluate_worker, t): i for i, t in enumerate(tasks)}
                 completed = 0
@@ -199,7 +211,8 @@ class ArenaEvaluator:
                     top += is_top12; final += is_final; champ += is_champ
                     rank_sum += r_res["avg_rank"]; bb_sum += r_res["avg_bb100"]
                     ranks.append(float(r_res["avg_rank"])); bbs.append(float(r_res["avg_bb100"]))
-                    if verbose:
+                    interval = max(1, runs // 20) if runs > 30 else 1
+                    if verbose and (completed % interval == 0 or completed == runs):
                         cum_bb = bb_sum / completed
                         cum_top = (top / completed) * 100.0
                         cum_champ = (champ / completed) * 100.0
@@ -280,27 +293,72 @@ class StrategyTrainer:
             out.append(replace(rng.choice(pool)))
         return out
 
-    def mutate(self,p,sigma):
-        d=asdict(p)
+    PARAM_BOUNDS: dict[str, tuple[float, float]] = {
+        # Preflop (healthy 6-max bounds preventing degenerate ultra-nit collapse)
+        "vpip": (0.18, 0.38),
+        "open_frequency": (0.45, 0.95),
+        "threebet_frequency": (0.04, 0.22),
+        "squeeze_frequency": (0.03, 0.18),
+        "steal_frequency": (0.60, 0.95),
+        # Postflop frequencies
+        "cbet_frequency": (0.40, 0.85),
+        "turn_barrel_frequency": (0.25, 0.75),
+        "river_bluff_frequency": (0.02, 0.20),
+        # Calibrated equity thresholds
+        "value_threshold": (0.58, 0.82),
+        "thin_value_threshold": (0.48, 0.72),
+        "raise_threshold": (0.52, 0.75),
+        "jam_threshold": (0.80, 0.98),
+        # Bet sizing
+        "open_size": (2.0, 3.5),
+        "cbet_size": (0.28, 0.85),
+        "value_bet_size": (0.40, 1.00),
+        "bluff_bet_size": (0.30, 0.85),
+        "raise_size": (0.45, 1.10),
+        # Tournament adaptation
+        "safety": (0.20, 0.80),
+        "attack": (0.30, 0.95),
+        "bubble_aggression": (0.50, 0.98),
+        "late_aggression": (0.10, 0.50),
+        "temperature": (0.02, 0.25),
+    }
+
+    def _clamp_and_validate(self, d: dict[str, Any]) -> None:
         for k in self.FIELDS:
-            scale=sigma*(.55 if k in {"value_threshold","thin_value_threshold","raise_threshold","jam_threshold"} else .35 if k=="open_size" else 1.0)
-            d[k]+=self.rng.gauss(0,scale)
+            lo, hi = self.PARAM_BOUNDS.get(k, (0.01, 0.99))
+            d[k] = max(lo, min(hi, float(d[k])))
+        # Enforce poker logical monotonicity invariants
+        d["thin_value_threshold"] = min(d["thin_value_threshold"], d["value_threshold"] - 0.04)
+        d["jam_threshold"] = max(d["jam_threshold"], d["value_threshold"] + 0.06)
+        d["bluff_bet_size"] = min(d["bluff_bet_size"], d["value_bet_size"])
+
+    def mutate(self, p, sigma):
+        d = asdict(p)
         for k in self.FIELDS:
-            d[k]=max(2.0,min(3.5,d[k])) if k=="open_size" else max(.01,min(.99,d[k]))
+            scale = sigma * (.55 if k in {"value_threshold", "thin_value_threshold", "raise_threshold", "jam_threshold"} else .35 if k == "open_size" else 1.0)
+            d[k] += self.rng.gauss(0, scale)
+        self._clamp_and_validate(d)
         return StrategyParams(**d)
 
-    def crossover(self,a,b):
-        da,db=asdict(a),asdict(b); out={}
+    def crossover(self, a, b):
+        da, db = asdict(a), asdict(b)
+        out = {}
         for k in da:
-            if k=="equity_samples": out[k]=max(0,int((da[k]+db[k])//2))
-            else: out[k]=da[k] if self.rng.random()<.5 else db[k]
+            if k == "equity_samples":
+                out[k] = max(0, int((da[k] + db[k]) // 2))
+            else:
+                out[k] = da[k] if self.rng.random() < 0.5 else db[k]
+        self._clamp_and_validate(out)
         return StrategyParams(**out)
 
-    def seed_population(self,n):
-        seeds=list(ARCHETYPES.values()); pop=[replace(ARCHETYPES["balanced"])]
+    def seed_population(self, n):
+        seeds = list(ARCHETYPES.values())
+        pop = [self.mutate(ARCHETYPES["balanced"], 0.0)]
         for p in seeds:
-            if len(pop)<n: pop.append(replace(p))
-        while len(pop)<n: pop.append(self.mutate(self.rng.choice(seeds),.06))
+            if len(pop) < n:
+                pop.append(self.mutate(p, 0.0))
+        while len(pop) < n:
+            pop.append(self.mutate(self.rng.choice(seeds), 0.06))
         return pop[:n]
 
     def _draw_pool(self, population, hall, seed, profile_pool, exclude=None):
@@ -326,9 +384,16 @@ class StrategyTrainer:
                 if p is not exclude: return p
             return rng.choice(pool)
 
-        out=[replace(pick(profile_pool)) for _ in range(n_profile)]
+        def jitter(p_in):
+            d = asdict(p_in)
+            for k in ("vpip", "open_frequency", "threebet_frequency", "cbet_frequency", "value_bet_size"):
+                if k in d:
+                    d[k] = max(0.05, min(0.95, d[k] + rng.gauss(0, 0.015)))
+            return StrategyParams(**d)
+
+        out=[jitter(pick(profile_pool)) for _ in range(n_profile)]
         while len(out)<n:
-            out.append(replace(pick(rest)))
+            out.append(jitter(pick(rest)))
         return out
 
     def _opponents(self, focal, population, hall, seed):
@@ -343,7 +408,7 @@ class StrategyTrainer:
         if seed_base is None:
             seed_base=self.seed+generation*1000003
         tasks=[(p,pool,seed_base,runs,self.equity_samples) for p in pop]
-        workers=self.workers or min(8,len(tasks))
+        workers=self.workers or min(os.cpu_count() or 4, len(tasks))
         n=len(tasks)
         print(f"  [{label}] {n} 个候选 × {runs} 场 ({workers} 核并发)...", flush=True)
         if workers<=1:
@@ -528,22 +593,50 @@ class StrategyTrainer:
         stable_champion = StrategyParams(**avg_dict)
 
         holdout_pool = self._holdout_pool()
-        final_payload = (stable_champion, holdout_pool, self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
-        final_metrics = _evaluate_worker(final_payload)
+        race_workers = self.workers or min(os.cpu_count() or 4, 8)
+        evaluator = ArenaEvaluator(
+            pool_size=self.pool_size,
+            equity_samples=self.equity_samples,
+            workers=race_workers,
+            seed=self.seed,
+        )
+        print(f"\n[Training] 启动终局大验证 (Final Race: {final_race} 场, {race_workers} 核并发加速)...", flush=True)
 
-        best_elite_payload = (champion, holdout_pool, self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
-        best_elite_metrics = _evaluate_worker(best_elite_payload)
+        print(f"  [1/3 终局验证] 留出集验证: 平滑精英策略 (Stable Champion)...", flush=True)
+        final_metrics = evaluator.evaluate(
+            stable_champion,
+            runs=max(1, final_race),
+            opponents=holdout_pool,
+            seed_offset=987654321,
+            verbose=True,
+        )
+
+        print(f"  [2/3 终局验证] 留出集验证: 原始冠军策略 (Raw Champion)...", flush=True)
+        best_elite_metrics = evaluator.evaluate(
+            champion,
+            runs=max(1, final_race),
+            opponents=holdout_pool,
+            seed_offset=987654321,
+            verbose=True,
+        )
 
         if best_elite_metrics["fitness"] > final_metrics["fitness"]:
             final_champ = champion
             final_metrics = best_elite_metrics
+            print("  -> 原始冠军策略表现更优，采纳为最终模型！", flush=True)
         else:
             final_champ = stable_champion
+            print("  -> 平滑精英策略表现更优，采纳为最终模型！", flush=True)
 
-        # Training-distribution reference, for the train/holdout gap.
-        train_payload = (final_champ, self._draw_pool(pop, hall, self.seed*31337, self._train_profile_params),
-                         self.seed + 123456789, max(1, final_race), max(0, self.equity_samples))
-        train_metrics = _evaluate_worker(train_payload)
+        print(f"  [3/3 终局验证] 训练分布参考基线...", flush=True)
+        train_pool = self._draw_pool(pop, hall, self.seed * 31337, self._train_profile_params)
+        train_metrics = evaluator.evaluate(
+            final_champ,
+            runs=max(1, final_race),
+            opponents=train_pool,
+            seed_offset=123456789,
+            verbose=True,
+        )
 
         print(f"[Training] 完成本轮演化 (累计到达 Gen {start_gen + generations}).", flush=True)
         print(f"[Training] 留出集验证 fitness={final_metrics['fitness']:.4f}±{final_metrics.get('fitness_se',0.0):.4f} "

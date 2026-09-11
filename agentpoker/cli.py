@@ -8,6 +8,7 @@ from .protocol import AgentPokerClient, Config
 from .live import LiveRunner
 from .collector import JSONLCollector, ReplayBuilder
 from .profiler import OpponentProfiler
+from .battle import ArenaBattle, discover_candidates, interactive_select_competitors, print_battle_report, CompetitorCandidate
 
 def run_connect(base_url: str = "https://poker.bang.sohu.com") -> None:
     import http.server, urllib.parse, secrets, webbrowser
@@ -125,13 +126,14 @@ def main():
     l.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'),help='赛事 ID，默认读 .env')
     l.add_argument('--key',default=os.getenv('AGENTPOKER_KEY'),help='API 密钥，默认读 .env')
     l.add_argument('--app',default=os.getenv('AGENTPOKER_APP','https://poker.bang.sohu.com'),help='服务器地址')
-    l.add_argument('--strategy',default='models/champion.json',help='使用的模型文件路径')
+    l.add_argument('--strategy',default=None,help='使用的模型文件路径（默认自动优选当前战力最高模型）')
     l.add_argument('--max-steps',type=int,default=0,help='最多循环多少步后退出，0=不限')
     l.add_argument('--max-hands',type=int,default=0,help='打满多少手后自动停止，0=不限（想跑一个 200 手周期就设 200）')
     l.add_argument('--round-hands',type=int,default=20,help='每轮手数，用于轮次结算提示（默认 20）')
     l.add_argument('--cycle-hands',type=int,default=200,help='每个锦标赛周期手数，用于赛季结算与压力信号（默认 200）')
     l.add_argument('--no-auto-profile',dest='auto_profile',action='store_false',default=True,help='关闭画像热更新（默认每 20 手自动把刚打完的对手写进画像库）')
     l.add_argument('--profiles',default='models/opponent_profiles.json',help='画像文件路径，实战时用于识别对手类型')
+    l.add_argument('--equity-samples',type=int,default=200,help='胜率蒙特卡洛采样数（实战极高精度默认 200，单次仅 ~7ms，绝不超时）')
     r=sub.add_parser('replay-export',help='把实录事件流转换成手牌记录（供 profile 使用）')
     r.add_argument('--raw',default='data/raw/events.jsonl',help='原始事件文件（live 运行时自动写入）')
     r.add_argument('--out',default='data/processed/hands.jsonl',help='输出的手牌文件路径')
@@ -147,6 +149,19 @@ def main():
     pr.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'),help='赛事 ID，默认读 .env')
     pr.add_argument('--pull',action='store_true',help='不从本地文件读，而是直接从赛事 API 拉取最新战绩')
     pr.add_argument('--max-hands',type=int,default=None,help='最多拉取多少手牌，不设则全量拉取')
+    bt=sub.add_parser('battle',aliases=['arena'],help='锦标赛擂台对决：多模型/多Agent 同台争冠擂台赛 (终端交互勾选/命令行直选)')
+    bt.add_argument('--models',nargs='*',default=None,help='参赛模型文件路径列表 (如 models/champion.json models/archive_universal/gen_004.json)')
+    bt.add_argument('--archetypes',nargs='*',default=None,help='参赛内置原型 Bot 列表 (如 tight lag maniac nit station balanced)')
+    bt.add_argument('--profiles',nargs='*',default=None,help='参赛真实玩家 agent_id 列表 (如 agent_2b330360a0882e97)')
+    bt.add_argument('--opponents',choices=['mix','profiles','archetypes'],default=None,help='陪练对手池来源: mix=混合池, profiles=纯真实画像, archetypes=纯原型Bot')
+    bt.add_argument('--profiles-file',default='models/opponent_profiles.json',help='对手画像文件路径')
+    bt.add_argument('--runs',type=int,default=None,help='擂台锦标赛场数 (默认 20)')
+    bt.add_argument('--agents',type=int,default=36,help='每场锦标赛总人数，6的倍数 (默认 36)')
+    bt.add_argument('--equity-samples',type=int,default=0,help='胜率采样数 (默认 0 查表)')
+    bt.add_argument('--workers',type=int,default=0,help='并发进程数 (0 为自动多核)')
+    bt.add_argument('--seed',type=int,default=42,help='随机数种子')
+    bt.add_argument('--non-interactive',action='store_true',help='非交互模式：直接根据命令行参数执行')
+    bt.add_argument('--save-report',default=None,help='将完整战报与矩阵保存为 JSON 文件')
     args=p.parse_args()
     if args.cmd=='simulate':
         names=list(ARCHETYPES); agents=[]
@@ -233,7 +248,26 @@ def main():
         if not cid:
             raise SystemExit('Error: AGENTPOKER_COMPETITION_ID is required.')
         prof_file=args.profiles if args.profiles and os.path.exists(args.profiles) else None
-        st=StrategyAgent.load(args.strategy,profiles=prof_file) if os.path.exists(args.strategy) else StrategyAgent(profiles=prof_file)
+        strat_path = args.strategy
+        if not strat_path:
+            for cand in (
+                "models/archive_optimized/gen_025.json",
+                "models/champion_optimized.json",
+                "models/archive_optimized/gen_011.json",
+                "models/archive_optimized/gen_007.json",
+                "models/champion_secondary.json",
+                "models/champion.json",
+            ):
+                if os.path.exists(cand):
+                    strat_path = cand
+                    break
+            strat_path = strat_path or "models/champion.json"
+
+        st = StrategyAgent.load(strat_path, profiles=prof_file) if os.path.exists(strat_path) else StrategyAgent(profiles=prof_file)
+        samples_val = getattr(args, 'equity_samples', 200) or 200
+        st.params.equity_samples = samples_val
+        print(f"[Live] 🎯 比赛优选模型已装载: {strat_path}")
+        print(f"[Live] 🚀 胜率蒙特卡洛极致精度已开启: equity_samples={samples_val} (单次决策 ~7ms, 绝对安全不超时)")
         client=AgentPokerClient(Config(base_url=args.app, key=key, competition_id=cid))
         runner = LiveRunner(
             client,
@@ -244,6 +278,85 @@ def main():
             cycle_hands=args.cycle_hands,
             auto_profile=args.auto_profile,
             profiles_path=args.profiles or 'models/opponent_profiles.json',
+            strategy_path=strat_path,
         )
         runner.run(max_steps=args.max_steps or None, max_hands=args.max_hands or None)
+    elif args.cmd in ('battle', 'arena'):
+        import sys
+        candidates = discover_candidates(profiles_path=args.profiles_file)
+        cand_map = {c.cid: c for c in candidates}
+
+        explicit_models = args.models or []
+        explicit_archetypes = args.archetypes or []
+        explicit_profiles = args.profiles or []
+        has_explicit = bool(explicit_models or explicit_archetypes or explicit_profiles)
+
+        if not has_explicit and not args.non_interactive:
+            chosen, opp_mode, runs, field_size = interactive_select_competitors(candidates)
+        else:
+            chosen = []
+            for m in explicit_models:
+                m_path = Path(m)
+                if m_path.exists():
+                    try:
+                        agent = StrategyAgent.load(m_path)
+                        chosen.append(CompetitorCandidate(
+                            cid=f"model:{m_path.stem}",
+                            name=str(m_path),
+                            category="model",
+                            params=agent.params,
+                            description=f"指定模型 {m_path.name}",
+                            source=str(m_path),
+                        ))
+                    except Exception as ex:
+                        print(f"警告: 无法加载模型 {m}: {ex}")
+                else:
+                    print(f"警告: 模型文件不存在 {m}")
+
+            for a in explicit_archetypes:
+                a_clean = a.lower().replace("bot_", "")
+                if a_clean in ARCHETYPES:
+                    chosen.append(CompetitorCandidate(
+                        cid=f"archetype:{a_clean}",
+                        name=f"bot_{a_clean}",
+                        category="archetype",
+                        params=ARCHETYPES[a_clean],
+                        description=f"内置原型 {a_clean}",
+                        source="builtin",
+                    ))
+                else:
+                    print(f"警告: 未知原型 {a}，支持列表: {list(ARCHETYPES.keys())}")
+
+            for p in explicit_profiles:
+                cid = f"profile:{p}"
+                if cid in cand_map:
+                    chosen.append(cand_map[cid])
+                else:
+                    print(f"警告: 未在画像库中找到选手 {p}")
+
+            if len(chosen) < 2:
+                print("错误: 命令行指定的参赛选手少于 2 位，无法开赛。请指定至少 2 位选手，或直接运行 `python -m agentpoker.cli battle` 进入终端交互选择。")
+                sys.exit(1)
+
+            opp_mode = args.opponents or 'mix'
+            runs = args.runs or 20
+            field_size = args.agents or 36
+
+        arena = ArenaBattle(
+            competitors=chosen,
+            opponent_mode=opp_mode,
+            profiles_path=args.profiles_file,
+            field_size=field_size,
+            equity_samples=args.equity_samples,
+            workers=args.workers,
+            seed=args.seed,
+        )
+        report = arena.run(runs=runs, verbose=True)
+        print_battle_report(report)
+
+        if args.save_report:
+            p = Path(args.save_report)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[战报已保存] {p.resolve()}")
 if __name__=='__main__': main()

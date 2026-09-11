@@ -99,7 +99,9 @@ class LeagueSimulator:
                     rows=sorted(_local.items(), key=lambda x: -(x[1]['net_bb']/max(1,x[1]['hands'])*100 if x[1]['hands']>0 else float('-inf')))
                     rank=next((i+1 for i,(a,_) in enumerate(rows) if a==aid), None)
                     b=(_local[aid]['net_bb']/_local[aid]['hands']*100) if _local[aid]['hands']>0 else None
-                    return {'rank':rank,'bb100':b,'hands_remaining':20-_h,'round_no':11}
+                    r3=(rows[2][1]['net_bb']/rows[2][1]['hands']*100) if len(rows)>=3 and rows[2][1]['hands']>0 else None
+                    r4=(rows[3][1]['net_bb']/rows[3][1]['hands']*100) if len(rows)>=4 and rows[3][1]['hands']>0 else None
+                    return {'rank':rank,'bb100':b,'hands_remaining':20-_h,'round_no':11,'rank3_bb100':r3,'rank4_bb100':r4}
                 res,dealer=self.engine.play_hand(grp,{aid:local[aid]['stack'] for aid in grp},dealer,policies,context_provider=_sf_ctx)
                 for aid in grp:
                     local[aid]['stack']=res.final_stacks[aid]; local[aid]['hands']+=1; local[aid]['net_bb']+=(local[aid]['stack']-before[aid])/self.big_blind
@@ -118,7 +120,9 @@ class LeagueSimulator:
                 rows=sorted(_local.items(), key=lambda x: -(x[1]['net_bb']/max(1,x[1]['hands'])*100 if x[1]['hands']>0 else float('-inf')))
                 rank=next((i+1 for i,(a,_) in enumerate(rows) if a==aid), None)
                 b=(_local[aid]['net_bb']/_local[aid]['hands']*100) if _local[aid]['hands']>0 else None
-                return {'rank':rank,'bb100':b,'hands_remaining':30-_h,'round_no':12}
+                r1=(rows[0][1]['net_bb']/rows[0][1]['hands']*100) if len(rows)>=1 and rows[0][1]['hands']>0 else None
+                r2=(rows[1][1]['net_bb']/rows[1][1]['hands']*100) if len(rows)>=2 and rows[1][1]['hands']>0 else None
+                return {'rank':rank,'bb100':b,'hands_remaining':30-_h,'round_no':12,'leader_bb100':r1,'second_bb100':r2,'rank1_bb100':r1,'rank2_bb100':r2}
             res,dealer=self.engine.play_hand(ids,{aid:local[aid]['stack'] for aid in ids},dealer,policies,context_provider=_f_ctx)
             for aid in ids:
                 local[aid]['stack']=res.final_stacks[aid]; local[aid]['hands']+=1; local[aid]['net_bb']+=(local[aid]['stack']-before[aid])/self.big_blind

@@ -33,7 +33,7 @@ def test_more_runs_shrinks_the_standard_error():
 
 def test_fitness_matches_the_declared_weighting():
     m = _summarise(12, 6, 3, [4.0] * 24, [0.0] * 24, 24, 24)
-    expected = .58 * 0.5 + .22 * 0.25 + .15 * 0.125 + .05 * (1 - 3 / 23)
+    expected = .20 * 0.5 + .25 * 0.25 + .45 * 0.125 + .05 * (1 - 3 / 23) + .05 * 0.5
     assert math.isclose(m["fitness"], expected, rel_tol=1e-9)
 
 

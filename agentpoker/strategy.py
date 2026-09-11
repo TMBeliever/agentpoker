@@ -238,6 +238,10 @@ class StrategyAgent:
         else:
             aggression_freq = self.params.cbet_frequency
 
+        # Multiway pot discount: C-betting into multiple active players requires more caution
+        if active_opp > 1 and street == 3:
+            aggression_freq *= (0.75 ** (active_opp - 1))
+
         # Opponent profile adjustments
         fold_edge = pot_odds - 0.045
         if facing_bet:
@@ -264,7 +268,7 @@ class StrategyAgent:
             if "raise" in legal and self._should_aggress(self.params.raise_threshold + 0.04 * texture["wetness"], pressure, strength):
                 return self._sized_raise(legal, strength=strength, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size)
             if "bet" in legal and self._should_aggress(0.55, pressure, strength):
-                return self._sized_bet(legal, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, street=street, is_cbet=is_cbet)
+                return self._sized_bet(legal, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, street=street, is_cbet=is_cbet, wetness=texture["wetness"])
             if "call" in legal:
                 return {"type": "call"}
             if "check" in legal:
@@ -296,7 +300,7 @@ class StrategyAgent:
         if "raise" in legal and self._noise(bluff_rate):
             return self._sized_raise(legal, strength=max(strength, 0.25), value=False, pressure=pressure, pot=pot, bb_size=bb_size)
         if "bet" in legal and self._noise(bluff_rate):
-            return self._sized_bet(legal, value=False, pressure=pressure, pot=pot, bb_size=bb_size)
+            return self._sized_bet(legal, value=False, pressure=pressure, pot=pot, bb_size=bb_size, street=street, wetness=texture["wetness"])
 
         # Standard check/call/fold resolution
         call_cut = max(0.20, pot_odds * (0.95 - 0.08 * pressure))
@@ -450,9 +454,47 @@ class StrategyAgent:
         r13 = ctx.get("rank13_bb100")
         bb = ctx.get("bb100")
         rem = ctx.get("hands_remaining")
+        round_no = ctx.get("round_no")
         if rank is None:
             return 0.0
+
+        rem_val = max(0, int(rem)) if rem is not None else 50
         pressure = 0.0
+
+        # Semifinal stage (Round 11: 6-max, Top 3 qualify to final table)
+        if round_no == 11:
+            if rank <= 3:
+                r4 = ctx.get("rank4_bb100")
+                if r4 is not None and bb is not None and (float(bb) - float(r4)) > 15.0 and rem_val <= 8:
+                    pressure -= self.params.safety * 0.4
+                else:
+                    pressure += 0.05
+            else:
+                # Rank 4..6 is currently eliminated! Must attack to qualify
+                pressure += self.params.attack + 0.20
+                if rem_val <= 10:
+                    pressure += (self.params.bubble_aggression - 0.5) * 0.6 + self.params.late_aggression
+            return max(-1.0, min(1.0, pressure))
+
+        # Final table stage (Round 12: 6-max, Winner-Take-All for Championship!)
+        if round_no == 12:
+            if rank == 1:
+                # Leading the final table: maintain pressure without reckless punting
+                r2 = ctx.get("rank2_bb100") or ctx.get("second_bb100")
+                if r2 is not None and bb is not None and (float(bb) - float(r2)) > 20.0 and rem_val <= 8:
+                    pressure -= self.params.safety * 0.4
+                else:
+                    pressure += 0.10
+            else:
+                # Rank 2..6: Losing the championship! Attack to take 1st place
+                pressure += self.params.attack + 0.25
+                if rem_val <= 15:
+                    pressure += (self.params.bubble_aggression - 0.5) * 0.6 + self.params.late_aggression
+                if rem_val <= 8:
+                    pressure = min(1.0, pressure + 0.35)
+            return max(-1.0, min(1.0, pressure))
+
+        # Preliminary stage (Rounds 1-10: 200 hands, Top 12 qualify)
         if r12 is not None and bb is not None:
             gap = float(bb) - float(r12)
             if rank <= 12 and gap > 1.5:
@@ -461,16 +503,14 @@ class StrategyAgent:
                 pressure += self.params.attack
         if r13 is not None and bb is not None and rank <= 12 and float(bb) < float(r13) + 0.5:
             pressure += 0.10
-        if rem is not None:
-            rem = max(0, int(rem))
-            if rem <= 20:
-                # On the bubble (straddling the qualification line) how hard to press is
-                # a trait the genome chooses via bubble_aggression, not a constant.
-                if 10 <= rank <= 15:
-                    pressure += (self.params.bubble_aggression - 0.5) * 0.6
-                pressure += self.params.late_aggression if rank >= 13 else -0.05
-            if rem <= 10:
-                pressure *= 1.20
+        if rem_val <= 20:
+            # On the bubble (straddling the qualification line) how hard to press is
+            # a trait the genome chooses via bubble_aggression, not a constant.
+            if 10 <= rank <= 15:
+                pressure += (self.params.bubble_aggression - 0.5) * 0.6
+            pressure += self.params.late_aggression if rank >= 13 else -0.05
+        if rem_val <= 10:
+            pressure *= 1.20
         return max(-1.0, min(1.0, pressure))
 
     def _should_aggress(self, base: float, pressure: float, strength: float) -> bool:
@@ -499,7 +539,7 @@ class StrategyAgent:
             target = int(lo + (hi - lo) * max(0.05, min(0.90, frac)))
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
-    def _sized_bet(self, legal: dict[str, Any], value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0, street: int | None = None, is_cbet: bool = False) -> dict[str, Any]:
+    def _sized_bet(self, legal: dict[str, Any], value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0, street: int | None = None, is_cbet: bool = False, wetness: float | None = None) -> dict[str, Any]:
         spec = legal.get("bet", legal.get("raise"))
         if not spec:
             return {"type": "allIn"} if "allIn" in legal else ({"type": "check"} if "check" in legal else {"type": "call"})
@@ -515,7 +555,10 @@ class StrategyAgent:
             base = self.params.cbet_size
         else:
             base = self.params.value_bet_size if value else self.params.bluff_bet_size
-        frac = (base + 0.08 * max(0.0, pressure)) * size_mult
+        wet_factor = 1.0
+        if wetness is not None:
+            wet_factor = 0.85 if wetness <= 0.3 else (1.15 if wetness >= 0.8 else 1.0)
+        frac = (base + 0.08 * max(0.0, pressure)) * size_mult * wet_factor
         if pot > 0:
             target = int(max(pot * frac, bb_size))
         else:
@@ -688,7 +731,10 @@ class StrategyAgent:
     @classmethod
     def load(cls, path: str | Path, profiles: dict[str, Any] | str | Path | None = None) -> StrategyAgent:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        agent = cls(StrategyParams(**data.get("params", data)))
+        raw = data.get("champion") or data.get("params") or data
+        valid_keys = set(asdict(StrategyParams()).keys())
+        params_dict = {k: v for k, v in raw.items() if k in valid_keys} if isinstance(raw, dict) else raw
+        agent = cls(StrategyParams(**params_dict))
         if profiles is not None:
             agent.load_opponent_profiles(profiles)
         return agent

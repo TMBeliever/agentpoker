@@ -237,3 +237,35 @@ def test_short_stack_min_raise_boundary():
         assert decision["amount"] <= 500
     else:
         assert decision["type"] in ("allIn", "check", "fold")
+
+
+def test_trainer_param_bounds_clamping():
+    from agentpoker.training import StrategyTrainer
+    trainer = StrategyTrainer(seed=42)
+    # Start with an extreme nit
+    nit_params = StrategyParams(vpip=0.01, cbet_size=0.01, value_threshold=0.60, thin_value_threshold=0.75, jam_threshold=0.50)
+    # Mutate with zero sigma -> must clamp and fix monotonicity
+    clamped = trainer.mutate(nit_params, 0.0)
+    assert clamped.vpip >= 0.18, "VPIP must never drop below healthy 6-max floor (0.18)"
+    assert clamped.cbet_size >= 0.28, "C-bet size must never drop below 28% pot"
+    assert clamped.thin_value_threshold < clamped.value_threshold, "thin value must be strictly less than full value"
+    assert clamped.jam_threshold > clamped.value_threshold, "jam threshold must be strictly greater than value threshold"
+
+
+def test_championship_tournament_pressure():
+    agent = StrategyAgent()
+    # 1. Semifinal: Rank 4 is eliminated -> pressure must be high attack
+    sf_losing_ctx = {"rank": 4, "round_no": 11, "hands_remaining": 6, "bb100": -10.0, "rank3_bb100": 15.0}
+    p_sf_losing = agent._tournament_pressure(sf_losing_ctx)
+    assert p_sf_losing > 0.5, "Losing in semifinal must trigger high attack pressure"
+
+    # 2. Final: Rank 2 is losing the championship -> pressure must be aggressive attack
+    final_second_ctx = {"rank": 2, "round_no": 12, "hands_remaining": 6, "bb100": 20.0, "leader_bb100": 50.0}
+    p_final_second = agent._tournament_pressure(final_second_ctx)
+    assert p_final_second > 0.5, "2nd place in final must trigger aggressive attack to overtake leader"
+
+    # 3. Final: Rank 1 is leading -> pressure is controlled
+    final_first_ctx = {"rank": 1, "round_no": 12, "hands_remaining": 6, "bb100": 50.0, "second_bb100": 20.0}
+    p_final_first = agent._tournament_pressure(final_first_ctx)
+    assert p_final_first < p_final_second, "Leader in final should not be more desperate than 2nd place"
+

@@ -24,9 +24,12 @@ class LiveRunner:
         auto_profile: bool = True,
         profiles_path: str = "models/opponent_profiles.json",
         report_path: str = "data/live_reports.jsonl",
+        strategy_path: str | None = None,
     ):
         self.client = client
         self.strategy = strategy
+        self.strategy_path = strategy_path
+        self._strategy_mtime = os.path.getmtime(strategy_path) if strategy_path and os.path.exists(strategy_path) else 0.0
         self.cid = competition_id or client.cfg.competition_id
         self.table_id = None
         self.collector = collector
@@ -393,6 +396,24 @@ class LiveRunner:
         except Exception as e:
             print(f" • [画像热更] 提示: 增量更新画像跳过 ({e})")
 
+    def _check_and_reload_strategy(self) -> None:
+        """Hot-reload strategy parameters if the strategy file on disk has been updated."""
+        if not self.strategy_path or not os.path.exists(self.strategy_path):
+            return
+        try:
+            mtime = os.path.getmtime(self.strategy_path)
+            if mtime > self._strategy_mtime:
+                prof_file = self.profiles_path if self.profiles_path and os.path.exists(self.profiles_path) else None
+                fresh_agent = StrategyAgent.load(self.strategy_path, profiles=prof_file)
+                old_equity = getattr(self.strategy.params, 'equity_samples', 0)
+                if old_equity:
+                    fresh_agent.params.equity_samples = old_equity
+                self.strategy.params = fresh_agent.params
+                self._strategy_mtime = mtime
+                print(f"\n[Live] ⚡ 策略热重载成功！已在比赛中平滑切换至新模型: {self.strategy_path} (VPIP={self.strategy.params.vpip:.1%}, 偷盲={self.strategy.params.steal_frequency:.1%})", flush=True)
+        except Exception as e:
+            pass
+
     def _join_until_ready(self):
         while True:
             try:
@@ -472,6 +493,7 @@ class LiveRunner:
         self._standings_rows = rows if isinstance(rows, list) else []
 
     def _make_action_body(self, obs: dict[str, Any]) -> dict[str, Any]:
+        self._check_and_reload_strategy()
         obs["tournamentContext"] = self._tournament_context(obs.get("agentId"))
 
         req = copy.deepcopy(obs['actionRequest'])
