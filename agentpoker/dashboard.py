@@ -54,10 +54,15 @@ class ProcessManager:
         runs = str(params.get("runs", 40))
         agents = str(params.get("agents", 36))
         workers = str(params.get("workers", 2))
-        base_model = params.get("base_model") or "models/champion_optimized.json"
-        archive = params.get("archive") or "models/archive_v2"
         save_path = params.get("save") or "models/champion_v2.json"
-        mix_profiles = bool(params.get("mix_profiles", True))
+        archive = params.get("archive") or "models/archive_v2"
+        
+        start_mode = params.get("start_mode", "finetune")
+        base_model = params.get("base_model") or "models/champion_optimized.json"
+        
+        opp_mode = params.get("opp_mode", "mix")
+        min_hands = str(params.get("min_hands", 100))
+        overwrite_champion = bool(params.get("overwrite_champion", False))
 
         cmd = [
             sys.executable, "-m", "agentpoker.cli", "train",
@@ -68,14 +73,26 @@ class ProcessManager:
             "--workers", workers,
             "--save", save_path,
             "--archive", archive,
-            "--base-model", base_model,
-            "--no-resume"
         ]
-        if mix_profiles:
-            cmd.extend(["--mix-profiles", "--profile-min-hands", "100", "--profile-share", "0.5"])
+
+        if start_mode == "resume":
+            # 默认带 resume，不传 --no-resume
+            pass
+        elif start_mode == "finetune":
+            cmd.extend(["--no-resume", "--base-model", base_model])
+        else: # scratch
+            cmd.extend(["--no-resume"])
+
+        if opp_mode == "pure_human":
+            cmd.extend(["--track", "targeted", "--profiles", "models/opponent_profiles.json", "--profile-min-hands", min_hands])
+        elif opp_mode == "mix":
+            cmd.extend(["--mix-profiles", "--profiles", "models/opponent_profiles.json", "--profile-min-hands", min_hands, "--profile-share", "0.5"])
+        else: # archetypes
+            cmd.extend(["--track", "universal"])
 
         f_log = open(self.train_log_file, "a", encoding="utf-8")
         f_log.write(f"\n=== [Dashboard] 训练启动于 {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+        f_log.write(f"配置: 起步={start_mode}, 对手池={opp_mode}, 保存={save_path}, 覆盖主模型={'是' if overwrite_champion else '否'}\n")
         f_log.write(f"命令: {' '.join(cmd)}\n\n")
         f_log.flush()
 
@@ -83,6 +100,26 @@ class ProcessManager:
             cmd, cwd=str(ROOT_DIR), stdout=f_log, stderr=subprocess.STDOUT, text=True, preexec_fn=os.setsid
         )
         self.train_start_time = time.time()
+
+        if overwrite_champion:
+            import threading, shutil
+            def _watch_and_promote(proc, sp):
+                proc.wait()
+                if proc.returncode == 0:
+                    src = ROOT_DIR / sp
+                    dst = ROOT_DIR / "models" / "champion.json"
+                    try:
+                        if src.exists() and src.resolve() != dst.resolve():
+                            if dst.exists():
+                                shutil.copy(dst, ROOT_DIR / "models" / "champion.json.bak")
+                            shutil.copy(src, dst)
+                            with open(self.train_log_file, "a", encoding="utf-8") as fl:
+                                fl.write("\n[Dashboard] 🏆 训练胜出！已自动晋升并覆盖主战模型: models/champion.json (原模型已备份为 .bak)\n")
+                    except Exception as e:
+                        with open(self.train_log_file, "a", encoding="utf-8") as fl:
+                            fl.write(f"\n[Dashboard] 警告: 同步主模型失败: {e}\n")
+            threading.Thread(target=_watch_and_promote, args=(self.train_proc, save_path), daemon=True).start()
+
         return {"status": "success", "message": f"训练已成功启动 (PID: {self.train_proc.pid})"}
 
     def stop_training(self) -> dict[str, Any]:
@@ -361,56 +398,157 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <!-- 训练参数控制与图表 -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- 控制表单 -->
-        <div class="card-dark rounded-xl p-5 shadow space-y-4">
-          <h2 class="text-base font-semibold text-white flex items-center gap-2">
-            <i class="fa-solid fa-sliders text-emerald-400"></i> 训练参数配置
-          </h2>
-          <div class="grid grid-cols-2 gap-3 text-xs">
+        <div class="card-dark rounded-xl p-5 shadow space-y-3.5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-sliders text-emerald-400"></i> 演化训练高级配置
+            </h2>
+            <span class="text-[10px] text-emerald-400/80 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">2.0 引擎</span>
+          </div>
+
+          <!-- 1. 起步方式与底模 -->
+          <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 space-y-2 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1 font-medium">起步演化方式</label>
+              <select id="selStartMode" onchange="onStartModeChange(); updateEstimates();" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+                <option value="finetune">🔥 基于底模热启动微调 (稳健推荐)</option>
+                <option value="resume">⚡ 历史断点续训 (从选定归档最新代数继续)</option>
+                <option value="scratch">🌱 从零冷启动演化 (无底模自主摸索)</option>
+              </select>
+            </div>
+            <div id="boxBaseModel">
+              <label class="block text-slate-400 mb-1">选择微调底模 (Base Model)</label>
+              <select id="selBaseModel" onchange="updateEstimates();" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white"></select>
+            </div>
+          </div>
+
+          <!-- 2. 对手池与真人画像配置 -->
+          <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 space-y-2 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1 font-medium">对抗对手池来源 (是否纯真人)</label>
+              <select id="selOppMode" onchange="updateEstimates();" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+                <option value="mix">🛡️ 混合实战池 (50% 真实画像 + 50% 经典原型)</option>
+                <option value="pure_human">🎯 赛场纯真人画像 (100% 真实玩家特训收割)</option>
+                <option value="archetypes">⚖️ 纯经典原型池 (0% 真人，纳什博弈自演化)</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-400 mb-1">画像入选门槛 (手)</label>
+                <input type="number" id="inpMinHands" value="100" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white" title="剔除低于该手数的样本噪声画像">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">每场总人数 (Agents)</label>
+                <input type="number" id="inpAgents" value="36" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 训练规模参数 -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
             <div>
               <label class="block text-slate-400 mb-1">训练代数</label>
-              <input type="number" id="inpGens" value="10" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+              <input type="number" id="inpGens" value="10" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white">
             </div>
             <div>
-              <label class="block text-slate-400 mb-1">种群大小 (候选数)</label>
-              <input type="number" id="inpPop" value="8" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+              <label class="block text-slate-400 mb-1">种群候选数</label>
+              <input type="number" id="inpPop" value="8" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white">
             </div>
             <div>
-              <label class="block text-slate-400 mb-1">初评场数 / 候选</label>
-              <input type="number" id="inpRuns" value="40" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+              <label class="block text-slate-400 mb-1">初评场数/候选</label>
+              <input type="number" id="inpRuns" value="40" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white">
             </div>
             <div>
-              <label class="block text-slate-400 mb-1">并发 Workers (2h2g建议2)</label>
-              <input type="number" id="inpWorkers" value="2" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+              <label class="block text-slate-400 mb-1">并发 Workers (2h2g设2)</label>
+              <input type="number" id="inpWorkers" value="2" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white">
             </div>
           </div>
-          <div>
-            <label class="block text-slate-400 text-xs mb-1">初始热启动底模</label>
-            <select id="selBaseModel" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white"></select>
+
+          <!-- 4. 模型保存与覆盖策略 -->
+          <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 space-y-2 text-xs">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-400 mb-1">产出模型文件</label>
+                <input type="text" id="inpSavePath" value="models/champion_v2.json" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-[11px]">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">归档目录</label>
+                <input type="text" id="inpArchiveDir" value="models/archive_v2" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-[11px]">
+              </div>
+            </div>
+            <div class="flex items-start space-x-2 pt-1">
+              <input type="checkbox" id="chkOverwriteMain" onchange="updateEstimates()" class="mt-0.5 rounded bg-slate-900 border-slate-700 text-emerald-500">
+              <label for="chkOverwriteMain" class="text-slate-300 text-[11px] leading-tight">
+                训练终局胜出后，<span class="text-amber-400 font-semibold">自动同步覆盖主战模型</span> (models/champion.json，旧模型自动生成 .bak 备份)
+              </label>
+            </div>
           </div>
-          <div class="flex items-center space-x-2 text-xs">
-            <input type="checkbox" id="chkMixProfiles" checked class="rounded bg-slate-900 border-slate-700 text-emerald-500">
-            <label for="chkMixProfiles" class="text-slate-300">混入优质真实玩家画像 (50% 比例)</label>
-          </div>
-          <div class="pt-2 flex gap-3">
-            <button onclick="startTrain()" id="btnStartTrain" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
+
+          <!-- 操作按钮 -->
+          <div class="pt-1 flex gap-3">
+            <button onclick="startTrain()" id="btnStartTrain" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950">
               <i class="fa-solid fa-play"></i> 启动演化训练
             </button>
-            <button onclick="stopTrain()" id="btnStopTrain" class="bg-red-600/80 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
+            <button onclick="stopTrain()" id="btnStopTrain" class="bg-red-600/80 hover:bg-red-600 text-white font-medium px-4 py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
               <i class="fa-solid fa-stop"></i> 停止
             </button>
           </div>
         </div>
 
-        <!-- 演化趋势折线图 -->
-        <div class="card-dark rounded-xl p-5 shadow lg:col-span-2 flex flex-col">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-base font-semibold text-white flex items-center gap-2">
-              <i class="fa-solid fa-chart-line text-blue-400"></i> Fitness 与盈利演化曲线
-            </h2>
-            <span class="text-xs text-slate-400" id="lblGenCount">累计 0 代数据</span>
+        <!-- 旁边预估面板 & 演化趋势折线图 -->
+        <div class="lg:col-span-2 space-y-4 flex flex-col">
+          <!-- ⚡ 训练开销与收益实时智能预估看板 -->
+          <div class="card-dark rounded-xl p-4 shadow border border-emerald-500/20 bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/20">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+              <h2 class="text-xs font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-bolt text-amber-400"></i> 参数实时动态预估与硬件评估
+              </h2>
+              <span class="text-[10px] text-slate-400">基于 2h2g 算力模型实时演算</span>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800/80">
+                <div class="text-[11px] text-slate-400">单代预估耗时</div>
+                <div class="text-base font-black text-emerald-400 mt-0.5" id="estGenTime">~3 分钟</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">双核并行评估</div>
+              </div>
+
+              <div class="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800/80">
+                <div class="text-[11px] text-slate-400">整轮总耗时</div>
+                <div class="text-base font-black text-amber-400 mt-0.5" id="estTotalTime">~34 分钟</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">含终局 3 方大验证</div>
+              </div>
+
+              <div class="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800/80">
+                <div class="text-[11px] text-slate-400">锦标赛对抗总量</div>
+                <div class="text-base font-black text-blue-400 mt-0.5" id="estTotalMatches">3,700 场</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">全手牌博弈样本</div>
+              </div>
+
+              <div class="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800/80">
+                <div class="text-[11px] text-slate-400">2h2g 内存预计占用</div>
+                <div class="text-xs font-bold text-slate-200 mt-1" id="estRam">~75 MB (3.6%)</div>
+                <div class="text-[10px] text-emerald-400 mt-0.5">安全余量 > 1.8GB</div>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] text-slate-400 gap-1">
+              <div><i class="fa-solid fa-bullseye text-purple-400 mr-1"></i> 置信度评级: <span id="estConfidence" class="text-emerald-400 font-semibold">稳健平衡 (标准误 ±0.05)</span></div>
+              <div class="text-slate-500" id="estStrategySummary">底模微调 · 50% 混合实战 · 仅存新模型</div>
+            </div>
           </div>
-          <div class="flex-1 min-h-[220px]">
-            <canvas id="fitnessChart"></canvas>
+
+          <!-- 演化趋势折线图 -->
+          <div class="card-dark rounded-xl p-5 shadow flex-1 flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-blue-400"></i> Fitness 与盈利演化曲线
+              </h2>
+              <span class="text-xs text-slate-400" id="lblGenCount">累计 0 代数据</span>
+            </div>
+            <div class="flex-1 min-h-[220px]">
+              <canvas id="fitnessChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -761,14 +899,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       } catch (e) {}
     }
 
+    function onStartModeChange() {
+      const mode = document.getElementById("selStartMode").value;
+      const box = document.getElementById("boxBaseModel");
+      if (mode === "scratch" || mode === "resume") {
+        box.classList.add("opacity-40", "pointer-events-none");
+      } else {
+        box.classList.remove("opacity-40", "pointer-events-none");
+      }
+    }
+
     async function startTrain() {
       const payload = {
         generations: document.getElementById("inpGens").value,
         population: document.getElementById("inpPop").value,
         runs: document.getElementById("inpRuns").value,
+        agents: document.getElementById("inpAgents").value,
         workers: document.getElementById("inpWorkers").value,
+        start_mode: document.getElementById("selStartMode").value,
         base_model: document.getElementById("selBaseModel").value,
-        mix_profiles: document.getElementById("chkMixProfiles").checked
+        opp_mode: document.getElementById("selOppMode").value,
+        min_hands: document.getElementById("inpMinHands").value,
+        save: document.getElementById("inpSavePath").value,
+        archive: document.getElementById("inpArchiveDir").value,
+        overwrite_champion: document.getElementById("chkOverwriteMain").checked
       };
       const res = await fetch("/api/train/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const d = await res.json();
@@ -800,6 +954,79 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       fetchStatus();
     }
 
+    function updateEstimates() {
+      const gens = parseInt(document.getElementById("inpGens").value) || 10;
+      const pop = parseInt(document.getElementById("inpPop").value) || 8;
+      const runs = parseInt(document.getElementById("inpRuns").value) || 40;
+      const workers = Math.max(1, parseInt(document.getElementById("inpWorkers").value) || 2);
+      const startMode = document.getElementById("selStartMode").value;
+      const oppMode = document.getElementById("selOppMode").value;
+      const overwrite = document.getElementById("chkOverwriteMain").checked;
+
+      const genMatches = pop * runs;
+      const totalMatches = gens * genMatches + 500;
+      
+      const secPerGen = Math.round((genMatches * 0.55) / workers + 15);
+      const totalSec = secPerGen * gens + 90;
+
+      let genTimeStr = "";
+      if (secPerGen < 60) {
+        genTimeStr = `~${secPerGen} 秒`;
+      } else {
+        const m = Math.floor(secPerGen / 60);
+        const s = secPerGen % 60;
+        genTimeStr = s > 0 ? `~${m}分${s}秒` : `~${m} 分钟`;
+      }
+
+      let totalTimeStr = "";
+      if (totalSec < 60) {
+        totalTimeStr = `~${totalSec} 秒`;
+      } else if (totalSec < 3600) {
+        totalTimeStr = `~${Math.round(totalSec / 60)} 分钟`;
+      } else {
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.round((totalSec % 3600) / 60);
+        totalTimeStr = m > 0 ? `~${h} 小时 ${m} 分钟` : `~${h} 小时`;
+      }
+
+      let seLevel = "";
+      let seColor = "";
+      if (runs < 25) {
+        seLevel = "粗略初筛 (标准误 ±0.08，方差略大)";
+        seColor = "text-amber-400";
+      } else if (runs <= 50) {
+        seLevel = "稳健平衡 (标准误 ±0.05，推荐)";
+        seColor = "text-emerald-400";
+      } else {
+        seLevel = "高精度极佳 (标准误 ±0.035，收敛极强)";
+        seColor = "text-purple-400";
+      }
+
+      const ramMB = 25 + workers * 25;
+      const ramPercent = ((ramMB / 2048) * 100).toFixed(1);
+
+      let oppText = "";
+      if (oppMode === "pure_human") oppText = "100% 赛场纯真人收割特训";
+      else if (oppMode === "mix") oppText = "50% 混合实战池";
+      else oppText = "0% 真人，纯原型自博弈";
+
+      let startText = "";
+      if (startMode === "finetune") startText = "底模微调";
+      else if (startMode === "resume") startText = "断点续训";
+      else startText = "从零冷启动";
+
+      document.getElementById("estGenTime").innerText = genTimeStr;
+      document.getElementById("estTotalTime").innerText = totalTimeStr;
+      document.getElementById("estTotalMatches").innerText = totalMatches.toLocaleString() + " 场";
+      
+      const seEl = document.getElementById("estConfidence");
+      seEl.innerText = seLevel;
+      seEl.className = "font-semibold text-xs " + seColor;
+
+      document.getElementById("estRam").innerText = `~${ramMB} MB (${ramPercent}%)`;
+      document.getElementById("estStrategySummary").innerText = `${startText} · ${oppText} · ${overwrite ? "终局自动覆盖主模型" : "仅存新模型"}`;
+    }
+
     async function switchTable() {
       const res = await fetch("/api/live/switch_table", { method: "POST" });
       const d = await res.json();
@@ -811,6 +1038,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       fetchStatus();
       loadHands();
       refreshLogs();
+      updateEstimates();
       setInterval(fetchStatus, 3000);
       setInterval(refreshLogs, 4000);
     };
