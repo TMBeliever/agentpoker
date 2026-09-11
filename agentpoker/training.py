@@ -269,13 +269,15 @@ class StrategyTrainer:
     FIELDS=tuple(k for k in asdict(StrategyParams()).keys() if k!="equity_samples")
     HALL_SIZE=12
     def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25,
-                 profile_min_hands=15, profile_share=0.5, profile_top: int | None = None):
+                 profile_min_hands=15, profile_share=0.5, profile_top: int | None = None, self_play: bool = False, shadow_clones: int = 2):
         self.rng=random.Random(seed); self.seed=seed; self.pool_size=max(12,pool_size); self.equity_samples=equity_samples; self.workers=workers
         self.profiles=profiles
         self.holdout_frac=min(0.5, max(0.0, float(holdout_frac)))
         self.profile_min_hands=int(profile_min_hands)
         self.profile_share=min(1.0, max(0.0, float(profile_share)))
         self.profile_top=int(profile_top) if profile_top is not None else None
+        self.self_play=bool(self_play)
+        self.shadow_clones=max(1, int(shadow_clones))
         self._cached_profile_params = []
         if self.profiles:
             profs = ArenaEvaluator._load_profiles(self.profiles, self.profile_min_hands, self.profile_top)
@@ -421,7 +423,22 @@ class StrategyTrainer:
                     d[k] = max(0.05, min(0.95, d[k] + rng.gauss(0, 0.015)))
             return StrategyParams(**d)
 
-        out=[jitter(pick(profile_pool)) for _ in range(n_profile)]
+        out=[]
+        # 2.5 影子自博弈守门员 (Shadow Clones): 注入自身历史最高水平镜像
+        if self.self_play and n >= 4:
+            shadow_candidates = [p for _, p in hall] if hall else [p for p in population if p is not exclude]
+            if not shadow_candidates and profile_pool:
+                shadow_candidates = profile_pool
+            if shadow_candidates:
+                n_shadow = min(self.shadow_clones, n // 3)
+                for _ in range(n_shadow):
+                    out.append(jitter(pick(shadow_candidates)))
+
+        n_rem = n - len(out)
+        n_prof = min(n_rem, n_profile)
+        for _ in range(n_prof):
+            out.append(jitter(pick(profile_pool)))
+
         while len(out)<n:
             out.append(jitter(pick(rest)))
         return out
@@ -462,6 +479,9 @@ class StrategyTrainer:
             stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01,resume_revert_margin=0.05,base_model=None):
         ap=Path(archive); ap.mkdir(parents=True,exist_ok=True)
         start_gen=0; history=[]; hall=[]; champion=None; champion_metrics=None
+
+        if self.self_play:
+            print(f"[Training 2.5] ⚡ 激活【2.5 影子自博弈协同演化模式】: 每场锁定 {self.shadow_clones} 位历史最强镜像作为守门员，淬炼抗剥削 GTO 平衡！", flush=True)
 
         if resume:
             gen_files = sorted(ap.glob("gen_*.json"))

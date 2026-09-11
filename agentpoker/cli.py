@@ -117,6 +117,8 @@ def main():
     t.add_argument('--reeval-runs',type=int,default=40,help='每代初选后用全新对手池复评的场数，用于消除「冠军只是抽样运气」的偏差')
     t.add_argument('--holdout-frac',type=float,default=0.25,help='留出集比例：这部分真实画像不参与训练，只用于最终验证泛化能力（默认 25%%）')
     t.add_argument('--base-model',default=None,help='初始底模路径（如 models/champion.json）。没有历史存档或新开特训时以此模型为起点微调，避免从零冷启动')
+    t.add_argument('--self-play',action='store_true',default=False,help='启用 2.5 影子自博弈模式：在对手池中常驻历史巅峰克隆体作为守门员，强化防守平衡防反杀')
+    t.add_argument('--shadow-clones',type=int,default=2,help='2.5 自博弈模式下同桌常驻的影子克隆体数量（默认 2）')
     e=sub.add_parser('evaluate',help='离线评估：让指定模型跟真实画像打 N 场锦标赛，看泛化表现（不上真实赛场）')
     e.add_argument('--strategy',default='models/champion.json',help='要评估的模型文件路径')
     e.add_argument('--runs',type=int,default=500,help='评估场数。场数越多置信区间越窄，500 场时标准误约 ±0.016')
@@ -206,7 +208,12 @@ def main():
                 print(f"[Train] 纯原型模式 (未启用 --mix-profiles，无真实画像偏见)")
             print(f"[Train] 模型保存: {save_path} | 归档: {archive_dir}")
 
-        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands, profile_share=args.profile_share, profile_top=args.profile_top)
+        trainer = StrategyTrainer(
+            seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers,
+            profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands,
+            profile_share=args.profile_share, profile_top=args.profile_top,
+            self_play=args.self_play, shadow_clones=args.shadow_clones
+        )
         if profiles_src:
             n_prof = trainer.n_profiles_loaded
             print(f"[Train] 画像质量筛选: {n_prof} 位通过门槛 (>={args.profile_min_hands} 手)")

@@ -63,6 +63,7 @@ class ProcessManager:
         opp_mode = params.get("opp_mode", "mix")
         min_hands = str(params.get("min_hands", 100))
         overwrite_champion = bool(params.get("overwrite_champion", False))
+        self_play = bool(params.get("self_play", False))
 
         cmd = [
             sys.executable, "-m", "agentpoker.cli", "train",
@@ -83,16 +84,34 @@ class ProcessManager:
         else: # scratch
             cmd.extend(["--no-resume"])
 
+        selected_profiles = params.get("selected_profiles")
+        profiles_file = "models/opponent_profiles.json"
+        if selected_profiles and isinstance(selected_profiles, list) and len(selected_profiles) > 0:
+            full_p = ROOT_DIR / "models" / "opponent_profiles.json"
+            if full_p.exists():
+                try:
+                    full_data = json.loads(full_p.read_text(encoding="utf-8"))
+                    filtered = {aid: full_data[aid] for aid in selected_profiles if aid in full_data}
+                    if filtered:
+                        custom_p = ROOT_DIR / "models" / ".custom_selected_profiles.json"
+                        custom_p.write_text(json.dumps(filtered, ensure_ascii=False, indent=2), encoding="utf-8")
+                        profiles_file = "models/.custom_selected_profiles.json"
+                except Exception:
+                    pass
+
         if opp_mode == "pure_human":
-            cmd.extend(["--track", "targeted", "--profiles", "models/opponent_profiles.json", "--profile-min-hands", min_hands])
+            cmd.extend(["--track", "targeted", "--profiles", profiles_file, "--profile-min-hands", min_hands])
         elif opp_mode == "mix":
-            cmd.extend(["--mix-profiles", "--profiles", "models/opponent_profiles.json", "--profile-min-hands", min_hands, "--profile-share", "0.5"])
+            cmd.extend(["--mix-profiles", "--profiles", profiles_file, "--profile-min-hands", min_hands, "--profile-share", "0.5"])
         else: # archetypes
             cmd.extend(["--track", "universal"])
 
+        if self_play:
+            cmd.extend(["--self-play", "--shadow-clones", "2"])
+
         f_log = open(self.train_log_file, "a", encoding="utf-8")
         f_log.write(f"\n=== [Dashboard] 训练启动于 {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
-        f_log.write(f"配置: 起步={start_mode}, 对手池={opp_mode}, 保存={save_path}, 覆盖主模型={'是' if overwrite_champion else '否'}\n")
+        f_log.write(f"配置: 起步={start_mode}, 对手池={opp_mode}, 2.5影子自博弈={'开启' if self_play else '关闭'}, 保存={save_path}, 覆盖主模型={'是' if overwrite_champion else '否'}\n")
         f_log.write(f"命令: {' '.join(cmd)}\n\n")
         f_log.flush()
 
@@ -242,9 +261,215 @@ def get_models_list() -> list[str]:
     models_dir = ROOT_DIR / "models"
     if models_dir.exists():
         for p in sorted(models_dir.glob("*.json")):
-            if "profile" not in p.name:
+            if "profile" not in p.name and not p.name.startswith("."):
                 out.append(f"models/{p.name}")
     return out or ["models/champion_optimized.json"]
+
+def get_models_details() -> list[dict[str, Any]]:
+    models_dir = ROOT_DIR / "models"
+    if not models_dir.exists():
+        return []
+    
+    out = []
+    for p in sorted(models_dir.glob("*.json")):
+        if "profile" in p.name or p.name.startswith("."):
+            continue
+        try:
+            stat = p.stat()
+            d = json.loads(p.read_text(encoding="utf-8"))
+            
+            m = d.get("metrics") or d.get("training_metrics") or {}
+            history = d.get("history") or []
+            if not m and history:
+                m = history[-1].get("metrics") or {}
+            
+            params = d.get("champion") or d.get("params") or {}
+            vpip = float(params.get("vpip", 0.15))
+            open_freq = float(params.get("open_frequency", 0.5))
+            threebet_freq = float(params.get("threebet_frequency", 0.05))
+            cbet_freq = float(params.get("cbet_frequency", 0.5))
+            turn_barrel = float(params.get("turn_barrel_frequency", 0.5))
+            river_bluff = float(params.get("river_bluff_frequency", 0.03))
+            safety = float(params.get("safety", 0.5))
+            attack = float(params.get("attack", 0.5))
+            flop_val = float(params.get("flop_value_threshold", 0.58))
+            turn_val = float(params.get("turn_value_threshold", 0.65))
+            river_val = float(params.get("river_value_threshold", 0.74))
+            dry_size = float(params.get("dry_board_bet_size", 0.33))
+            wet_size = float(params.get("wet_board_bet_size", 0.75))
+
+            fitness = round(float(m.get("fitness", 0.0)), 4)
+            top12_rate = round(float(m.get("top12_rate", 0.0)) * 100, 1)
+            final_rate = round(float(m.get("final_rate", 0.0)) * 100, 1)
+            champion_rate = round(float(m.get("champion_rate", 0.0)) * 100, 1)
+            avg_bb100 = round(float(m.get("avg_bb100", 0.0)), 1)
+            avg_rank = round(float(m.get("avg_rank", 18.0)), 1)
+            gen = int(d.get("generation") or (history[-1].get("generation") if history else 0))
+
+            if vpip < 0.07:
+                archetype = "🛡️ 极紧反剥削 (Ultra-Nit)"
+                arch_desc = "极其自律精炼的入池范围，专注于坚果与顶端牌力；在多人混战局中极难被清空，具备深赛程反杀与抗剥削能力。"
+            elif vpip < 0.15:
+                archetype = "🎯 严谨紧凶 (Disciplined TAG)"
+                arch_desc = "平衡教科书式紧凶打法，翻前位次严明、后位积极偷盲，价值注下注极其清晰。"
+            elif vpip < 0.22:
+                archetype = "⚔️ 全能压制 (Universal TAG/LAG)"
+                arch_desc = "宽入池配合中高频翻后持续下注，兼顾底池收割与强力价值注，对被动弱手与跟注站具有极强压榨效率。"
+            else:
+                archetype = "💥 激进松凶 (Aggressive LAG)"
+                arch_desc = "极具攻击侵略性，频繁抢夺无主底池，单手筹码爆发力强。"
+
+            strengths = []
+            if open_freq >= 0.68:
+                strengths.append(f"翻前高频偷盲 ({round(open_freq*100, 1)}%)")
+            if threebet_freq >= 0.06:
+                strengths.append(f"3-Bet 激进反打 ({round(threebet_freq*100, 1)}%)")
+            if safety >= 0.7:
+                strengths.append(f"超高防守容错 ({round(safety*100, 1)}%)")
+            elif attack >= 0.55:
+                strengths.append(f"高压进攻导向 ({round(attack*100, 1)}%)")
+            if cbet_freq >= 0.5:
+                strengths.append(f"连贯 C-Bet 开枪 ({round(cbet_freq*100, 1)}%)")
+            if champion_rate >= 8.0:
+                strengths.append(f"决赛夺冠爆发 ({champion_rate}%)")
+            if top12_rate >= 50.0:
+                strengths.append(f"深赛程晋级稳 ({top12_rate}%)")
+            if avg_bb100 >= 60.0:
+                strengths.append(f"大盲暴利收割 (+{avg_bb100} BB/100)")
+            strengths.append("2.0干湿板平滑插值")
+
+            score_burst = min(100, int(champion_rate * 9.0 + 10))
+            score_deep = min(100, int(top12_rate * 1.5 + 10))
+            score_profit = min(100, max(20, int(avg_bb100 * 0.8 + 20)))
+            score_defense = min(100, max(10, int(safety * 60 + (1 - min(0.3, vpip)) * 130 - 30)))
+            score_pressure = min(100, int(attack * 50 + cbet_freq * 40 + open_freq * 20))
+
+            mtime_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(stat.st_mtime))
+            size_kb = round(stat.st_size / 1024, 1)
+
+            out.append({
+                "name": p.name,
+                "path": f"models/{p.name}",
+                "is_main": (p.name == "champion.json"),
+                "version": d.get("version", "2.0"),
+                "size_kb": size_kb,
+                "mtime": mtime_str,
+                "generation": gen,
+                "fitness": fitness,
+                "top12_rate": top12_rate,
+                "final_rate": final_rate,
+                "champion_rate": champion_rate,
+                "avg_bb100": avg_bb100,
+                "avg_rank": avg_rank,
+                "archetype": archetype,
+                "arch_desc": arch_desc,
+                "strengths": strengths,
+                "scores": {
+                    "burst": score_burst,
+                    "deep": score_deep,
+                    "profit": score_profit,
+                    "defense": score_defense,
+                    "pressure": score_pressure
+                },
+                "params": {
+                    "vpip": round(vpip * 100, 1),
+                    "open": round(open_freq * 100, 1),
+                    "threebet": round(threebet_freq * 100, 1),
+                    "cbet": round(cbet_freq * 100, 1),
+                    "barrel": round(turn_barrel * 100, 1),
+                    "bluff": round(river_bluff * 100, 1),
+                    "safety": round(safety * 100, 1),
+                    "attack": round(attack * 100, 1),
+                    "flop_val": round(flop_val, 2),
+                    "turn_val": round(turn_val, 2),
+                    "river_val": round(river_val, 2),
+                    "dry_size": round(dry_size * 100, 0),
+                    "wet_size": round(wet_size * 100, 0),
+                }
+            })
+        except Exception:
+            pass
+
+    return sorted(out, key=lambda x: (not x["is_main"], -x["fitness"]))
+
+def delete_model(model_rel_path: str) -> dict[str, Any]:
+    if not model_rel_path:
+        return {"status": "error", "message": "未指定要删除的模型文件"}
+    norm = os.path.normpath(model_rel_path)
+    if ".." in norm or not (norm.startswith("models/") or norm.startswith("models\\") or norm.startswith("models")):
+        return {"status": "error", "message": "非法路径，仅允许操作 models/ 目录下的模型"}
+    
+    target = ROOT_DIR / norm
+    if not target.exists() or not target.is_file():
+        return {"status": "error", "message": f"文件不存在: {model_rel_path}"}
+    
+    if target.name == "champion.json":
+        return {"status": "error", "message": "【安全保护】champion.json 是系统核心主战模型，禁止直接删除！如需更换，请将其他模型设为主战。"}
+    if target.name == "opponent_profiles.json":
+        return {"status": "error", "message": "opponent_profiles.json 是赛场对手画像库，禁止删除！"}
+
+    try:
+        target.unlink()
+        return {"status": "success", "message": f"模型 {target.name} 已彻底删除！"}
+    except Exception as e:
+        return {"status": "error", "message": f"删除失败: {e}"}
+
+def promote_model(model_rel_path: str) -> dict[str, Any]:
+    norm = os.path.normpath(model_rel_path)
+    if ".." in norm or not (norm.startswith("models/") or norm.startswith("models\\") or norm.startswith("models")):
+        return {"status": "error", "message": "非法路径"}
+    target = ROOT_DIR / norm
+    if not target.exists() or not target.is_file():
+        return {"status": "error", "message": f"文件不存在: {model_rel_path}"}
+    
+    dst = ROOT_DIR / "models" / "champion.json"
+    if target.resolve() == dst.resolve():
+        return {"status": "error", "message": "该模型已经是当前主战模型"}
+    
+    try:
+        import shutil
+        if dst.exists():
+            shutil.copy(dst, ROOT_DIR / "models" / "champion.json.bak")
+        shutil.copy(target, dst)
+        return {"status": "success", "message": f"🏆 已成功将 {target.name} 设为当前主战模型 (champion.json)！原主模型已自动备份为 .bak"}
+    except Exception as e:
+        return {"status": "error", "message": f"设为主战模型失败: {e}"}
+
+def get_model_content(model_rel_path: str) -> dict[str, Any]:
+    norm = os.path.normpath(model_rel_path)
+    if ".." in norm or not (norm.startswith("models/") or norm.startswith("models\\") or norm.startswith("models")):
+        return {"status": "error", "message": "非法路径"}
+    target = ROOT_DIR / norm
+    if not target.exists() or not target.is_file():
+        return {"status": "error", "message": f"文件不存在: {model_rel_path}"}
+    try:
+        return {"status": "success", "content": target.read_text(encoding="utf-8")}
+    except Exception as e:
+        return {"status": "error", "message": f"读取模型失败: {e}"}
+
+
+def get_profiles_data() -> list[dict[str, Any]]:
+    p = ROOT_DIR / "models" / "opponent_profiles.json"
+    if not p.exists():
+        return []
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        out = []
+        for aid, d in raw.items():
+            out.append({
+                "id": aid,
+                "name": d.get("name") or aid[:8],
+                "hands": int(d.get("hands", 0)),
+                "bb_100": round(float(d.get("bb_100", 0.0)), 1),
+                "vpip": round(float(d.get("vpip", 0.0)) * 100, 1),
+                "pfr": round(float(d.get("pfr", 0.0)) * 100, 1),
+                "af": round(float(d.get("af", 0.0)), 2),
+                "archetype": d.get("archetype", "未知风格"),
+                "advice": d.get("exploit_advice", "")
+            })
+        return sorted(out, key=lambda x: x["bb_100"], reverse=True)
+    except Exception:
+        return []
 
 def get_recent_hands(limit: int = 30) -> list[dict[str, Any]]:
     hands_file = ROOT_DIR / "data" / "processed" / "hands.jsonl"
@@ -367,6 +592,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <button onclick="switchTab('tabHands')" id="tabBtnHands" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
         <i class="fa-solid fa-clock-rotate-left"></i> 对局复盘观战
       </button>
+      <button onclick="switchTab('tabModels')" id="tabBtnModels" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+        <i class="fa-solid fa-microchip"></i> 策略模型仓库
+      </button>
     </div>
 
     <!-- TAB 1: 训练控制台 -->
@@ -440,6 +668,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <div>
                 <label class="block text-slate-400 mb-1">每场总人数 (Agents)</label>
                 <input type="number" id="inpAgents" value="36" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+              </div>
+            </div>
+            <div class="pt-1.5 border-t border-slate-800/60 flex items-center space-x-2">
+              <input type="checkbox" id="chkSelfPlay" onchange="updateEstimates()" class="rounded bg-slate-900 border-slate-700 text-purple-500">
+              <label for="chkSelfPlay" class="text-purple-300 font-medium text-[11px] flex items-center gap-1 cursor-pointer">
+                <i class="fa-solid fa-clone text-purple-400"></i> 激活 2.5 影子自博弈 (常驻历史巅峰镜像互博防守)
+              </label>
+            </div>
+
+            <!-- 真实画像自定义勾选抽屉 -->
+            <div class="pt-2 border-t border-slate-800/80">
+              <div class="flex items-center justify-between">
+                <button type="button" onclick="toggleRosterDrawer()" class="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition">
+                  <i class="fa-solid fa-users-viewfinder"></i> 
+                  <span>自定义参训真实选手</span>
+                  <span id="lblSelectedCount" class="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-700 text-amber-300">加载中...</span>
+                  <i id="icoRosterToggle" class="fa-solid fa-chevron-down text-[10px] transition-transform"></i>
+                </button>
+                <span class="text-[10px] text-slate-500" id="lblRosterSummary">能力排行勾选</span>
+              </div>
+
+              <div id="rosterDrawer" class="hidden mt-2.5 p-2 bg-slate-950/90 rounded-lg border border-slate-800 space-y-2">
+                <!-- 顶部快捷操作栏 -->
+                <div class="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-slate-800 text-[10px]">
+                  <div class="flex flex-wrap gap-1">
+                    <button type="button" onclick="selectProfiles('all')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">全选</button>
+                    <button type="button" onclick="selectProfiles('none')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">清空</button>
+                    <button type="button" onclick="selectProfiles('top20')" class="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700 hover:bg-emerald-900 text-emerald-300">前20强</button>
+                    <button type="button" onclick="selectProfiles('station')" class="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-300">跟注站/鱼</button>
+                    <button type="button" onclick="selectProfiles('maniac')" class="px-2 py-0.5 rounded bg-red-950/80 border border-red-700 hover:bg-red-900 text-red-300">狂徒/松凶</button>
+                  </div>
+                  <select id="selRosterSort" onchange="renderRosterList()" class="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-slate-300 text-[10px]">
+                    <option value="bb">按 战力(BB/100) 降序</option>
+                    <option value="hands">按 对战手数 降序</option>
+                    <option value="vpip">按 入池激进度 降序</option>
+                  </select>
+                </div>
+
+                <!-- 选手列表容器 -->
+                <div id="rosterList" class="max-h-[220px] overflow-y-auto space-y-1.5 pr-1 text-xs">
+                  <div class="text-center py-4 text-slate-500 text-xs">正在加载赛场画像库...</div>
+                </div>
               </div>
             </div>
           </div>
@@ -669,6 +939,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="text-center py-12 text-slate-500 text-xs">正在加载历史手牌...</div>
       </div>
     </div>
+
+    <!-- TAB 4: 策略模型仓库与能力档案 -->
+    <div id="tabModels" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/70 p-4 rounded-xl border border-slate-800 shadow">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-microchip text-emerald-400"></i> 策略模型全景仓库与能力档案
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">全景深度透视所有策略模型的胜率、战术特长、五维战力雷达与核心参数，支持一键切换主战、实战调用与安全删除清理。</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="loadModelsDetails()" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3.5 py-2 rounded-lg text-slate-200 transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-rotate"></i> 刷新模型档案
+          </button>
+        </div>
+      </div>
+
+      <!-- 模型网格容器 -->
+      <div id="modelsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="text-center py-16 text-slate-500 text-xs col-span-full">正在深度解析模型能力与战术特征...</div>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -680,13 +972,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("tabTrain").classList.add("hidden");
       document.getElementById("tabLive").classList.add("hidden");
       document.getElementById("tabHands").classList.add("hidden");
+      document.getElementById("tabModels").classList.add("hidden");
       document.getElementById(tabId).classList.remove("hidden");
 
-      document.getElementById("tabBtnTrain").className = "pb-3 border-b-2 " + (tabId === "tabTrain" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400");
-      document.getElementById("tabBtnLive").className = "pb-3 border-b-2 " + (tabId === "tabLive" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400");
-      document.getElementById("tabBtnHands").className = "pb-3 border-b-2 " + (tabId === "tabHands" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400");
+      document.getElementById("tabBtnTrain").className = "pb-3 border-b-2 flex items-center gap-2 " + (tabId === "tabTrain" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400 hover:text-slate-200");
+      document.getElementById("tabBtnLive").className = "pb-3 border-b-2 flex items-center gap-2 " + (tabId === "tabLive" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400 hover:text-slate-200");
+      document.getElementById("tabBtnHands").className = "pb-3 border-b-2 flex items-center gap-2 " + (tabId === "tabHands" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400 hover:text-slate-200");
+      document.getElementById("tabBtnModels").className = "pb-3 border-b-2 flex items-center gap-2 " + (tabId === "tabModels" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400 hover:text-slate-200");
 
       if (tabId === "tabHands") loadHands();
+      if (tabId === "tabModels") loadModelsDetails();
     }
 
     function renderCard(c) {
@@ -909,7 +1204,165 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    let cachedProfiles = [];
+    let selectedProfileIds = new Set();
+    let rosterDrawerOpen = false;
+
+    function toggleRosterDrawer() {
+      const drawer = document.getElementById("rosterDrawer");
+      const icon = document.getElementById("icoRosterToggle");
+      rosterDrawerOpen = !rosterDrawerOpen;
+      if (rosterDrawerOpen) {
+        drawer.classList.remove("hidden");
+        if (icon) icon.classList.add("rotate-180");
+      } else {
+        drawer.classList.add("hidden");
+        if (icon) icon.classList.remove("rotate-180");
+      }
+    }
+
+    function getArchetypeBadge(archetype) {
+      let colorClass = "bg-slate-800 text-slate-300 border-slate-700";
+      let shortName = archetype || "常规选手";
+      if (archetype.includes("Maniac") || archetype.includes("狂徒")) {
+        colorClass = "bg-red-950/80 text-red-400 border-red-700";
+        shortName = "狂徒 Maniac";
+      } else if (archetype.includes("LAG") || archetype.includes("松凶")) {
+        colorClass = "bg-orange-950/80 text-orange-400 border-orange-700";
+        shortName = "松凶 LAG";
+      } else if (archetype.includes("TAG") || archetype.includes("紧凶")) {
+        colorClass = "bg-blue-950/80 text-blue-400 border-blue-700";
+        shortName = "紧凶 TAG";
+      } else if (archetype.includes("Station") || archetype.includes("跟注站")) {
+        colorClass = "bg-amber-950/80 text-amber-400 border-amber-700";
+        shortName = "跟注站 Station";
+      } else if (archetype.includes("Passive") || archetype.includes("被动鱼")) {
+        colorClass = "bg-yellow-950/80 text-yellow-300 border-yellow-700";
+        shortName = "被动鱼 Passive";
+      } else if (archetype.includes("Nit") || archetype.includes("岩石")) {
+        colorClass = "bg-slate-800 text-slate-400 border-slate-600";
+        shortName = "岩石 Nit";
+      } else if (archetype.includes("Balanced") || archetype.includes("均衡")) {
+        colorClass = "bg-emerald-950/80 text-emerald-400 border-emerald-700";
+        shortName = "均衡 Balanced";
+      }
+      return `<span class="px-1.5 py-0.5 rounded text-[10px] font-medium border ${colorClass}">${shortName}</span>`;
+    }
+
+    async function loadProfilesList() {
+      const listEl = document.getElementById("rosterList");
+      try {
+        const res = await fetch("/api/profiles");
+        cachedProfiles = await res.json();
+        // 默认全选所有画像
+        selectedProfileIds = new Set(cachedProfiles.map(p => p.id));
+        updateRosterCount();
+        renderRosterList();
+      } catch (e) {
+        if (listEl) listEl.innerHTML = `<div class="text-red-400 text-xs py-3 text-center">加载选手花名册失败: ${e}</div>`;
+      }
+    }
+
+    function updateRosterCount() {
+      const lbl = document.getElementById("lblSelectedCount");
+      if (lbl && cachedProfiles) {
+        lbl.innerText = `${selectedProfileIds.size} / ${cachedProfiles.length} 人`;
+        if (selectedProfileIds.size === 0) {
+          lbl.className = "text-[10px] px-1.5 py-0.2 rounded bg-red-950/80 border border-red-700 text-red-300";
+        } else if (selectedProfileIds.size === cachedProfiles.length) {
+          lbl.className = "text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-700 text-emerald-300";
+        } else {
+          lbl.className = "text-[10px] px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-700 text-amber-300";
+        }
+      }
+    }
+
+    function renderRosterList() {
+      const container = document.getElementById("rosterList");
+      if (!container || !cachedProfiles || cachedProfiles.length === 0) return;
+
+      const sortMode = document.getElementById("selRosterSort") ? document.getElementById("selRosterSort").value : "bb";
+      const sorted = [...cachedProfiles].sort((a, b) => {
+        if (sortMode === "hands") return b.hands - a.hands;
+        if (sortMode === "vpip") return b.vpip - a.vpip;
+        return b.bb_100 - a.bb_100;
+      });
+
+      let html = "";
+      sorted.forEach((p, idx) => {
+        const isChecked = selectedProfileIds.has(p.id);
+        const badgeHtml = getArchetypeBadge(p.archetype);
+        const bbColor = p.bb_100 >= 0 ? "text-emerald-400" : "text-red-400";
+        const bbSign = p.bb_100 >= 0 ? "+" : "";
+        const rankNo = idx + 1;
+        const rankClass = rankNo <= 3 ? "text-amber-400 font-bold" : (rankNo <= 10 ? "text-slate-300 font-medium" : "text-slate-500");
+
+        html += `
+          <div class="flex items-center justify-between p-1.5 rounded bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 transition text-[11px] group ${isChecked ? '' : 'opacity-40'}">
+            <div class="flex items-center space-x-2 min-w-0">
+              <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleProfileSelection('${p.id}')" class="rounded bg-slate-950 border-slate-700 text-amber-500 cursor-pointer">
+              <span class="w-5 text-right font-mono text-[10px] ${rankClass}">#${rankNo}</span>
+              <span class="font-medium text-slate-200 truncate max-w-[90px] sm:max-w-[120px]" title="${p.name} (${p.id})">${p.name}</span>
+              ${badgeHtml}
+            </div>
+            <div class="flex items-center space-x-2.5 text-right shrink-0">
+              <span class="font-mono font-bold ${bbColor}" title="能力战力 BB/100">${bbSign}${p.bb_100}</span>
+              <span class="text-slate-400 text-[10px] hidden sm:inline" title="样本手数">${p.hands}手</span>
+              <span class="text-slate-500 text-[10px] hidden md:inline" title="入池率 VPIP">${p.vpip}%</span>
+              <span class="text-slate-500 text-[10px] hidden md:inline" title="激进度 AF">AF ${p.af}</span>
+              <span class="cursor-help text-slate-400 hover:text-amber-300" title="💡 战术剥削建议: ${p.advice}"><i class="fa-solid fa-circle-info"></i></span>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function toggleProfileSelection(id) {
+      if (selectedProfileIds.has(id)) {
+        selectedProfileIds.delete(id);
+      } else {
+        selectedProfileIds.add(id);
+      }
+      updateRosterCount();
+      renderRosterList();
+      updateEstimates();
+    }
+
+    function selectProfiles(type) {
+      if (!cachedProfiles || cachedProfiles.length === 0) return;
+      if (type === "all") {
+        selectedProfileIds = new Set(cachedProfiles.map(p => p.id));
+      } else if (type === "none") {
+        selectedProfileIds.clear();
+      } else if (type === "top20") {
+        const top = [...cachedProfiles].sort((a, b) => b.bb_100 - a.bb_100).slice(0, 20);
+        selectedProfileIds = new Set(top.map(p => p.id));
+      } else if (type === "station") {
+        const stations = cachedProfiles.filter(p => 
+          p.archetype.includes("Station") || p.archetype.includes("跟注站") || 
+          p.archetype.includes("Passive") || p.archetype.includes("被动鱼")
+        );
+        selectedProfileIds = new Set(stations.map(p => p.id));
+      } else if (type === "maniac") {
+        const maniacs = cachedProfiles.filter(p => 
+          p.archetype.includes("Maniac") || p.archetype.includes("狂徒") || 
+          p.archetype.includes("LAG") || p.archetype.includes("松凶")
+        );
+        selectedProfileIds = new Set(maniacs.map(p => p.id));
+      }
+      updateRosterCount();
+      renderRosterList();
+      updateEstimates();
+    }
+
     async function startTrain() {
+      const oppMode = document.getElementById("selOppMode").value;
+      if ((oppMode === "pure_human" || oppMode === "mix") && selectedProfileIds.size === 0) {
+        alert("⚠️ 当前对手池包含真人画像，但您未勾选任何参训选手！\n请在【自定义参训真实选手】中勾选至少 1 位选手，或将对手池切换为纯经典原型池。");
+        return;
+      }
+
       const payload = {
         generations: document.getElementById("inpGens").value,
         population: document.getElementById("inpPop").value,
@@ -918,8 +1371,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         workers: document.getElementById("inpWorkers").value,
         start_mode: document.getElementById("selStartMode").value,
         base_model: document.getElementById("selBaseModel").value,
-        opp_mode: document.getElementById("selOppMode").value,
+        opp_mode: oppMode,
+        selected_profiles: Array.from(selectedProfileIds),
         min_hands: document.getElementById("inpMinHands").value,
+        self_play: document.getElementById("chkSelfPlay").checked,
         save: document.getElementById("inpSavePath").value,
         archive: document.getElementById("inpArchiveDir").value,
         overwrite_champion: document.getElementById("chkOverwriteMain").checked
@@ -961,6 +1416,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const workers = Math.max(1, parseInt(document.getElementById("inpWorkers").value) || 2);
       const startMode = document.getElementById("selStartMode").value;
       const oppMode = document.getElementById("selOppMode").value;
+      const selfPlay = document.getElementById("chkSelfPlay").checked;
       const overwrite = document.getElementById("chkOverwriteMain").checked;
 
       const genMatches = pop * runs;
@@ -991,7 +1447,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       let seLevel = "";
       let seColor = "";
-      if (runs < 25) {
+      if (selfPlay) {
+        seLevel = "🟣 2.5 影子自博弈 (攻防兼备·防反杀)";
+        seColor = "text-purple-400";
+      } else if (runs < 25) {
         seLevel = "粗略初筛 (标准误 ±0.08，方差略大)";
         seColor = "text-amber-400";
       } else if (runs <= 50) {
@@ -1005,15 +1464,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const ramMB = 25 + workers * 25;
       const ramPercent = ((ramMB / 2048) * 100).toFixed(1);
 
+      const selCount = selectedProfileIds ? selectedProfileIds.size : 0;
+      const totalCount = cachedProfiles ? cachedProfiles.length : 0;
       let oppText = "";
-      if (oppMode === "pure_human") oppText = "100% 赛场纯真人收割特训";
-      else if (oppMode === "mix") oppText = "50% 混合实战池";
-      else oppText = "0% 真人，纯原型自博弈";
+      if (oppMode === "pure_human") {
+        oppText = `100% 纯真人特训 (${selCount}/${totalCount}人)`;
+      } else if (oppMode === "mix") {
+        oppText = `50% 混合实战池 (${selCount}人真实画像)`;
+      } else {
+        oppText = "0% 真人，纯原型自博弈";
+      }
 
       let startText = "";
       if (startMode === "finetune") startText = "底模微调";
       else if (startMode === "resume") startText = "断点续训";
       else startText = "从零冷启动";
+
+      const spText = selfPlay ? " · ⚡2.5影子守门员" : "";
 
       document.getElementById("estGenTime").innerText = genTimeStr;
       document.getElementById("estTotalTime").innerText = totalTimeStr;
@@ -1024,7 +1491,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       seEl.className = "font-semibold text-xs " + seColor;
 
       document.getElementById("estRam").innerText = `~${ramMB} MB (${ramPercent}%)`;
-      document.getElementById("estStrategySummary").innerText = `${startText} · ${oppText} · ${overwrite ? "终局自动覆盖主模型" : "仅存新模型"}`;
+      document.getElementById("estStrategySummary").innerText = `${startText} · ${oppText}${spText} · ${overwrite ? "终局自动覆盖主模型" : "仅存新模型"}`;
     }
 
     async function switchTable() {
@@ -1033,8 +1500,278 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       alert(d.message);
     }
 
+    let cachedModelsDetails = [];
+
+    async function loadModelsDetails() {
+      const grid = document.getElementById("modelsGrid");
+      try {
+        const res = await fetch("/api/models/details");
+        const list = await res.json();
+        cachedModelsDetails = list;
+        renderModelsGrid(list);
+      } catch (e) {
+        if (grid) grid.innerHTML = `<div class="text-red-400 text-xs py-10 text-center col-span-full">加载模型档案失败: ${e}</div>`;
+      }
+    }
+
+    function renderModelsGrid(models) {
+      const grid = document.getElementById("modelsGrid");
+      if (!grid) return;
+      if (!models || models.length === 0) {
+        grid.innerHTML = `<div class="text-center py-16 text-slate-500 text-xs col-span-full">暂无已保存的策略模型，可在【演化训练控制】中开始训练生成。</div>`;
+        return;
+      }
+
+      let html = "";
+      models.forEach(m => {
+        const borderClass = m.is_main 
+          ? "border-amber-500/50 shadow-amber-950/20 bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950/10" 
+          : "border-slate-800";
+        
+        const mainBadge = m.is_main
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-crown text-amber-400"></i> 当前主战模型 (Active)</span>`
+          : "";
+
+        const deleteBtn = m.is_main
+          ? `<span class="text-[10px] text-slate-500 px-2 py-1 rounded bg-slate-950 border border-slate-800 flex items-center gap-1" title="主战模型受保护，不可删除"><i class="fa-solid fa-shield-halved text-amber-400/80"></i> 主模型保护中</span>`
+          : `<button onclick="deleteModel('${m.path}', '${m.name}')" class="text-xs px-2.5 py-1 rounded bg-red-950/60 border border-red-800 hover:bg-red-900 text-red-300 transition flex items-center gap-1 shadow" title="彻底删除模型"><i class="fa-solid fa-trash-can"></i> 删除</button>`;
+
+        const promoteBtn = m.is_main
+          ? `<div class="text-xs font-semibold text-amber-400 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-amber-950/40 border border-amber-800/60 flex-1"><i class="fa-solid fa-check"></i> 当前默认实战主模</div>`
+          : `<button onclick="promoteModel('${m.path}', '${m.name}')" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white flex items-center justify-center gap-1.5 transition shadow"><i class="fa-solid fa-crown"></i> 设为当前主战模型</button>`;
+
+        const strengthsBadges = m.strengths.map(s => 
+          `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-900/90 text-amber-300/90 border border-slate-800">${s}</span>`
+        ).join("");
+
+        const bbColor = m.avg_bb100 >= 0 ? "text-emerald-400" : "text-red-400";
+        const bbSign = m.avg_bb100 >= 0 ? "+" : "";
+
+        html += `
+          <div class="card-dark rounded-xl p-5 shadow-lg border ${borderClass} flex flex-col justify-between space-y-4">
+            <!-- 头部基本信息 -->
+            <div>
+              <div class="flex items-start justify-between gap-2 pb-3 border-b border-slate-800">
+                <div>
+                  <div class="flex items-center flex-wrap gap-2">
+                    <span class="font-bold text-white text-base font-mono">${m.name}</span>
+                    ${mainBadge}
+                    <span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">Gen ${m.generation}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800">v${m.version}</span>
+                  </div>
+                  <div class="text-[10px] text-slate-400 mt-1 flex items-center gap-2">
+                    <span><i class="fa-regular fa-hard-drive"></i> ${m.size_kb} KB</span>
+                    <span>•</span>
+                    <span><i class="fa-regular fa-clock"></i> ${m.mtime}</span>
+                  </div>
+                </div>
+                <div class="shrink-0">
+                  ${deleteBtn}
+                </div>
+              </div>
+
+              <!-- 战术定位与特长 -->
+              <div class="mt-3.5 bg-slate-950/80 p-3 rounded-lg border border-slate-800/80 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-emerald-400">${m.archetype}</span>
+                  <span class="text-[10px] text-slate-400">综合 Fitness: <span class="font-mono font-bold text-emerald-300">${m.fitness.toFixed(3)}</span></span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">${m.arch_desc}</p>
+                <div class="flex flex-wrap gap-1.5 pt-1">
+                  ${strengthsBadges}
+                </div>
+              </div>
+
+              <!-- 4项核心胜率与收益指标卡片 -->
+              <div class="grid grid-cols-4 gap-2 mt-3.5 text-center">
+                <div class="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                  <div class="text-[10px] text-slate-400">🏆 夺冠胜率</div>
+                  <div class="text-sm font-black text-purple-400 mt-0.5">${m.champion_rate.toFixed(1)}%</div>
+                </div>
+                <div class="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                  <div class="text-[10px] text-slate-400">🎯 前12出线</div>
+                  <div class="text-sm font-black text-amber-400 mt-0.5">${m.top12_rate.toFixed(1)}%</div>
+                </div>
+                <div class="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                  <div class="text-[10px] text-slate-400">🏅 决赛入围</div>
+                  <div class="text-sm font-black text-indigo-400 mt-0.5">${m.final_rate.toFixed(1)}%</div>
+                </div>
+                <div class="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                  <div class="text-[10px] text-slate-400">📈 单手收益</div>
+                  <div class="text-sm font-black ${bbColor} mt-0.5">${bbSign}${m.avg_bb100.toFixed(1)}</div>
+                </div>
+              </div>
+
+              <!-- 五维能力评分条 -->
+              <div class="mt-3.5 space-y-1.5 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800/60 text-[11px]">
+                <div class="flex items-center justify-between text-slate-400">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-fire text-purple-400"></i> 锦标赛夺冠爆发力</span>
+                  <div class="w-1/2 flex items-center gap-2">
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div class="bg-purple-500 h-1.5 rounded-full" style="width: ${m.scores.burst}%"></div>
+                    </div>
+                    <span class="w-6 text-right font-mono text-[10px] text-slate-300">${m.scores.burst}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between text-slate-400">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-bullseye text-amber-400"></i> 预赛深赛程晋级率</span>
+                  <div class="w-1/2 flex items-center gap-2">
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div class="bg-amber-500 h-1.5 rounded-full" style="width: ${m.scores.deep}%"></div>
+                    </div>
+                    <span class="w-6 text-right font-mono text-[10px] text-slate-300">${m.scores.deep}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between text-slate-400">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-coins text-emerald-400"></i> 大盲筹码收割能力</span>
+                  <div class="w-1/2 flex items-center gap-2">
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div class="bg-emerald-500 h-1.5 rounded-full" style="width: ${m.scores.profit}%"></div>
+                    </div>
+                    <span class="w-6 text-right font-mono text-[10px] text-slate-300">${m.scores.profit}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between text-slate-400">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield text-blue-400"></i> 防守容错与抗反杀</span>
+                  <div class="w-1/2 flex items-center gap-2">
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div class="bg-blue-500 h-1.5 rounded-full" style="width: ${m.scores.defense}%"></div>
+                    </div>
+                    <span class="w-6 text-right font-mono text-[10px] text-slate-300">${m.scores.defense}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between text-slate-400">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-bolt text-red-400"></i> 进攻压迫与下注施压</span>
+                  <div class="w-1/2 flex items-center gap-2">
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div class="bg-red-500 h-1.5 rounded-full" style="width: ${m.scores.pressure}%"></div>
+                    </div>
+                    <span class="w-6 text-right font-mono text-[10px] text-slate-300">${m.scores.pressure}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 核心参数速览 -->
+              <div class="mt-3 p-2.5 bg-slate-900/60 rounded-lg border border-slate-800 text-[10px] text-slate-400 space-y-1">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono">
+                  <div>VPIP: <span class="text-white">${m.params.vpip}%</span></div>
+                  <div>Open: <span class="text-white">${m.params.open}%</span></div>
+                  <div>3-Bet: <span class="text-white">${m.params.threebet}%</span></div>
+                  <div>C-Bet: <span class="text-white">${m.params.cbet}%</span></div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono pt-1 border-t border-slate-800/60">
+                  <div>防守 Safety: <span class="text-white">${m.params.safety}%</span></div>
+                  <div>进攻 Attack: <span class="text-white">${m.params.attack}%</span></div>
+                  <div>门槛: <span class="text-white">${m.params.flop_val}/${m.params.turn_val}/${m.params.river_val}</span></div>
+                  <div>注码: <span class="text-white">干${m.params.dry_size}%/湿${m.params.wet_size}%</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片底部操作按钮 -->
+            <div class="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+              ${promoteBtn}
+              <button onclick="useModelForLive('${m.path}', '${m.name}')" class="px-3 py-2 rounded-lg text-xs font-semibold bg-blue-700/80 hover:bg-blue-600 text-white flex items-center justify-center gap-1.5 transition shadow" title="在比赛对战中使用该模型"><i class="fa-solid fa-play"></i> 选定实战</button>
+              <button onclick="viewJsonModal('${m.path}', '${m.name}')" class="px-3 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center gap-1.5 transition border border-slate-700" title="查看完整 JSON 参数"><i class="fa-solid fa-code"></i> JSON</button>
+            </div>
+          </div>
+        `;
+      });
+      grid.innerHTML = html;
+    }
+
+    async function deleteModel(path, name) {
+      if (!confirm(`⚠️ 危险操作确认：\n确认彻底删除策略模型【${name}】？\n此操作不可撤销！`)) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/models/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: path })
+        });
+        const d = await res.json();
+        alert(d.message);
+        loadModelsDetails();
+        loadModels();
+      } catch (e) {
+        alert("删除请求失败: " + e);
+      }
+    }
+
+    async function promoteModel(path, name) {
+      if (!confirm(`🏆 确认将【${name}】晋升为当前主战模型 (champion.json)？\n旧主战模型将自动备份为 champion.json.bak。`)) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/models/promote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: path })
+        });
+        const d = await res.json();
+        alert(d.message);
+        loadModelsDetails();
+        loadModels();
+      } catch (e) {
+        alert("设置主战模型失败: " + e);
+      }
+    }
+
+    function useModelForLive(path, name) {
+      const sel = document.getElementById("selLiveModel");
+      if (sel) {
+        sel.value = path;
+      }
+      switchTab("tabLive");
+      alert(`已为您切换至【在线赛事实战】面板，并选定策略模型:【${name}】！\n点击“启动比赛对战”即可开始实战。`);
+    }
+
+    async function viewJsonModal(path, name) {
+      const modal = document.getElementById("jsonModal");
+      const title = document.getElementById("jsonModalTitle");
+      const content = document.getElementById("jsonModalContent");
+      title.innerHTML = `<i class="fa-solid fa-code text-amber-400"></i> 模型 JSON 明细: <span class="font-mono text-emerald-400 ml-1">${name}</span>`;
+      content.innerText = "正在读取文件内容...";
+      modal.classList.remove("hidden");
+
+      try {
+        const res = await fetch(`/api/models/content?model=${encodeURIComponent(path)}`);
+        const d = await res.json();
+        if (d.status === "success") {
+          content.innerText = d.content;
+        } else {
+          content.innerText = "读取失败: " + d.message;
+        }
+      } catch (e) {
+        content.innerText = "请求出错: " + e;
+      }
+    }
+
+    function closeJsonModal() {
+      document.getElementById("jsonModal").classList.add("hidden");
+    }
+
+    function copyJsonModalContent() {
+      const content = document.getElementById("jsonModalContent").innerText;
+      navigator.clipboard.writeText(content).then(() => {
+        const btn = document.getElementById("btnCopyJson");
+        const orig = btn.innerHTML;
+        btn.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> 已复制！`;
+        setTimeout(() => { btn.innerHTML = orig; }, 2000);
+      }).catch(e => {
+        alert("复制失败，请手动选取复制");
+      });
+    }
+
     window.onload = () => {
       loadModels();
+      loadProfilesList();
+      loadModelsDetails();
       fetchStatus();
       loadHands();
       refreshLogs();
@@ -1043,6 +1780,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       setInterval(refreshLogs, 4000);
     };
   </script>
+
+  <!-- Modal for viewing model JSON -->
+  <div id="jsonModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+      <div class="flex items-center justify-between p-4 border-b border-slate-800">
+        <h3 id="jsonModalTitle" class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-code text-amber-400"></i> 模型 JSON 参数明细
+        </h3>
+        <button onclick="closeJsonModal()" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 font-mono text-xs text-emerald-400 bg-slate-950 rounded-lg mx-4 my-2 border border-slate-800">
+        <pre id="jsonModalContent" class="whitespace-pre-wrap break-all"></pre>
+      </div>
+      <div class="p-3 border-t border-slate-800 flex justify-end gap-2 px-4">
+        <button onclick="copyJsonModalContent()" id="btnCopyJson" class="text-xs px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition flex items-center gap-1.5">
+          <i class="fa-regular fa-copy"></i> 复制完整 JSON
+        </button>
+        <button onclick="closeJsonModal()" class="text-xs px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition">关闭</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>"""
 
@@ -1074,6 +1834,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if path == "/api/models":
             self._send_json(get_models_list())
+            return
+
+        if path == "/api/models/details":
+            self._send_json(get_models_details())
+            return
+
+        if path == "/api/models/content":
+            query = urllib.parse.parse_qs(parsed.query)
+            m_path = query.get("model", [""])[0]
+            self._send_json(get_model_content(m_path))
+            return
+
+        if path == "/api/profiles":
+            self._send_json(get_profiles_data())
             return
 
         if path == "/api/hands":
@@ -1116,6 +1890,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/live/switch_table":
             self._send_json(pm.switch_table())
+            return
+        if path == "/api/models/delete":
+            model = params.get("model", "")
+            self._send_json(delete_model(model))
+            return
+        if path == "/api/models/promote":
+            model = params.get("model", "")
+            self._send_json(promote_model(model))
             return
 
         self.send_response(404)
