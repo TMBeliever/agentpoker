@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  agentpoker:
+    build: .
+    container_name: agentpoker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    shm_size: '256mb'
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs

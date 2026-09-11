@@ -167,7 +167,7 @@ def evaluate_relative_strength(hero: list[Card], board: list[Card]) -> dict[str,
     Execution time is < 15 microseconds, ideal for fast simulation and live play.
     """
     if not board:
-        return {"strength": 0.5, "category": -1, "tier": "preflop", "draw_equity": 0.0, "is_draw": False, "danger": 0.0}
+        return {"strength": 0.5, "category": -1, "tier": "preflop", "draw_equity": 0.0, "is_draw": False, "danger": 0.0, "blocker_effects": {"has_nut_flush_blocker": False}}
 
     hr = sorted([c.rank for c in hero], reverse=True)
     br = sorted([c.rank for c in board], reverse=True)
@@ -329,6 +329,14 @@ def evaluate_relative_strength(hero: list[Card], board: list[Card]) -> dict[str,
             if "draw" not in tier and tier == "high_card":
                 tier = "gutshot"
 
+    # Blocker effect detection (e.g. nut flush blocker when board has 3+ of a suit)
+    has_nut_flush_blocker = False
+    if board_flush_danger:
+        flush_suit = max(set(bs), key=bs.count)
+        board_suit_ranks = {c.rank for c in board if c.suit == flush_suit}
+        unseen_nut_rank = max((r for r in range(2, 15) if r not in board_suit_ranks), default=0)
+        has_nut_flush_blocker = any(c.suit == flush_suit and c.rank == unseen_nut_rank for c in hero)
+
     total_strength = max(0.05, min(0.995, base + min(0.28, draw_equity)))
     return {
         "strength": total_strength,
@@ -338,4 +346,7 @@ def evaluate_relative_strength(hero: list[Card], board: list[Card]) -> dict[str,
         "tier": tier,
         "danger": danger,
         "category": cat,
+        "blocker_effects": {
+            "has_nut_flush_blocker": has_nut_flush_blocker,
+        },
     }

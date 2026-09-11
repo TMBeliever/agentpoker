@@ -8,13 +8,23 @@ from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
 
 ARCHETYPES = {
-    "nit": StrategyParams(vpip=.14, open_frequency=.50, threebet_frequency=.055, squeeze_frequency=.035, steal_frequency=.58, cbet_frequency=.55, turn_barrel_frequency=.42, river_bluff_frequency=.035, value_threshold=.72, thin_value_threshold=.64, raise_threshold=.66, jam_threshold=.94, open_size=2.20, cbet_size=.42, value_bet_size=.72, bluff_bet_size=.46, raise_size=.62, safety=.60, attack=.48, bubble_aggression=.52, late_aggression=.10, temperature=.05),
-    "tight": StrategyParams(vpip=.18, open_frequency=.58, threebet_frequency=.070, squeeze_frequency=.045, steal_frequency=.65, cbet_frequency=.60, turn_barrel_frequency=.50, river_bluff_frequency=.055, value_threshold=.70, thin_value_threshold=.62, raise_threshold=.64, jam_threshold=.93, open_size=2.30, cbet_size=.45, value_bet_size=.71, bluff_bet_size=.50, raise_size=.65, safety=.52, attack=.56, bubble_aggression=.62, late_aggression=.14, temperature=.06),
+    "nit": StrategyParams(vpip=.14, open_frequency=.50, threebet_frequency=.055, squeeze_frequency=.035, steal_frequency=.58, cbet_frequency=.55, turn_barrel_frequency=.42, river_bluff_frequency=.035, value_threshold=.72, thin_value_threshold=.64, raise_threshold=.66, jam_threshold=.94, flop_value_threshold=.64, turn_value_threshold=.70, river_value_threshold=.78, open_size=2.20, cbet_size=.42, value_bet_size=.72, bluff_bet_size=.46, raise_size=.62, dry_board_bet_size=.28, wet_board_bet_size=.70, safety=.60, attack=.48, bubble_aggression=.52, late_aggression=.10, temperature=.05),
+    "tight": StrategyParams(vpip=.18, open_frequency=.58, threebet_frequency=.070, squeeze_frequency=.045, steal_frequency=.65, cbet_frequency=.60, turn_barrel_frequency=.50, river_bluff_frequency=.055, value_threshold=.70, thin_value_threshold=.62, raise_threshold=.64, jam_threshold=.93, flop_value_threshold=.60, turn_value_threshold=.66, river_value_threshold=.75, open_size=2.30, cbet_size=.45, value_bet_size=.71, bluff_bet_size=.50, raise_size=.65, dry_board_bet_size=.30, wet_board_bet_size=.72, safety=.52, attack=.56, bubble_aggression=.62, late_aggression=.14, temperature=.06),
     "balanced": StrategyParams(),
-    "lag": StrategyParams(vpip=.31, open_frequency=.72, threebet_frequency=.105, squeeze_frequency=.075, steal_frequency=.82, cbet_frequency=.69, turn_barrel_frequency=.61, river_bluff_frequency=.11, value_threshold=.61, thin_value_threshold=.54, raise_threshold=.57, jam_threshold=.87, open_size=2.40, cbet_size=.50, value_bet_size=.67, bluff_bet_size=.58, raise_size=.73, safety=.38, attack=.82, bubble_aggression=.88, late_aggression=.30, temperature=.13),
-    "station": StrategyParams(vpip=.43, open_frequency=.47, threebet_frequency=.040, squeeze_frequency=.025, steal_frequency=.55, cbet_frequency=.43, turn_barrel_frequency=.33, river_bluff_frequency=.020, value_threshold=.64, thin_value_threshold=.56, raise_threshold=.69, jam_threshold=.95, open_size=2.25, cbet_size=.41, value_bet_size=.74, bluff_bet_size=.42, raise_size=.56, safety=.42, attack=.55, bubble_aggression=.58, late_aggression=.12, temperature=.03),
-    "maniac": StrategyParams(vpip=.48, open_frequency=.83, threebet_frequency=.145, squeeze_frequency=.110, steal_frequency=.90, cbet_frequency=.77, turn_barrel_frequency=.72, river_bluff_frequency=.18, value_threshold=.54, thin_value_threshold=.50, raise_threshold=.50, jam_threshold=.80, open_size=2.55, cbet_size=.56, value_bet_size=.62, bluff_bet_size=.64, raise_size=.82, safety=.72, attack=.96, bubble_aggression=.98, late_aggression=.42, temperature=.18),
+    "lag": StrategyParams(vpip=.31, open_frequency=.72, threebet_frequency=.105, squeeze_frequency=.075, steal_frequency=.82, cbet_frequency=.69, turn_barrel_frequency=.61, river_bluff_frequency=.11, value_threshold=.61, thin_value_threshold=.54, raise_threshold=.57, jam_threshold=.87, flop_value_threshold=.52, turn_value_threshold=.60, river_value_threshold=.69, open_size=2.40, cbet_size=.50, value_bet_size=.67, bluff_bet_size=.58, raise_size=.73, dry_board_bet_size=.36, wet_board_bet_size=.80, safety=.38, attack=.82, bubble_aggression=.88, late_aggression=.30, temperature=.13),
+    "station": StrategyParams(vpip=.43, open_frequency=.47, threebet_frequency=.040, squeeze_frequency=.025, steal_frequency=.55, cbet_frequency=.43, turn_barrel_frequency=.33, river_bluff_frequency=.020, value_threshold=.64, thin_value_threshold=.56, raise_threshold=.69, jam_threshold=.95, flop_value_threshold=.56, turn_value_threshold=.62, river_value_threshold=.70, open_size=2.25, cbet_size=.41, value_bet_size=.74, bluff_bet_size=.42, raise_size=.56, dry_board_bet_size=.32, wet_board_bet_size=.74, safety=.42, attack=.55, bubble_aggression=.58, late_aggression=.12, temperature=.03),
+    "maniac": StrategyParams(vpip=.48, open_frequency=.83, threebet_frequency=.145, squeeze_frequency=.110, steal_frequency=.90, cbet_frequency=.77, turn_barrel_frequency=.72, river_bluff_frequency=.18, value_threshold=.54, thin_value_threshold=.50, raise_threshold=.50, jam_threshold=.80, flop_value_threshold=.48, turn_value_threshold=.55, river_value_threshold=.63, open_size=2.55, cbet_size=.56, value_bet_size=.62, bluff_bet_size=.64, raise_size=.82, dry_board_bet_size=.42, wet_board_bet_size=.88, safety=.72, attack=.96, bubble_aggression=.98, late_aggression=.42, temperature=.18),
 }
+
+def _load_params_safe(raw: Any) -> StrategyParams:
+    """Safely instantiate StrategyParams from dict or existing object, ignoring unknown keys and filling defaults."""
+    if isinstance(raw, StrategyParams):
+        return replace(raw)
+    if not isinstance(raw, dict):
+        return StrategyParams()
+    valid_keys = set(asdict(StrategyParams()).keys())
+    filtered = {k: v for k, v in raw.items() if k in valid_keys}
+    return StrategyParams(**filtered)
 
 def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
     """Aggregate per-run outcomes into fitness plus its own uncertainty.
@@ -148,6 +158,10 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
         thin_value_threshold=0.50 if is_maniac else (0.62 if is_nit else 0.57),
         raise_threshold=0.58 if is_maniac else (0.68 if is_nit else 0.62),
         jam_threshold=0.84 if is_maniac else (0.93 if is_nit else 0.90),
+        # Street-specific value thresholds
+        flop_value_threshold=num("flop_value_threshold", 0.48 if is_maniac else (0.64 if is_nit else 0.58), 0.40, 0.75),
+        turn_value_threshold=num("turn_value_threshold", 0.56 if is_maniac else (0.70 if is_nit else 0.65), 0.48, 0.82),
+        river_value_threshold=num("river_value_threshold", 0.64 if is_maniac else (0.78 if is_nit else 0.74), 0.55, 0.90),
         # Measured sizings, straight from the hands this opponent actually played
         open_size=num("open_size_bb", 2.40 if is_maniac else 2.25, 2.0, 3.5),
         cbet_size=num("cbet_size", 0.47, 0.15, 0.95),
@@ -157,6 +171,9 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
         # most players fire smaller when bluffing than when value betting.
         bluff_bet_size=max(0.15, min(0.95, 0.85 * num("value_bet_size", 0.69, 0.15, 0.95))),
         raise_size=num("raise_size", 0.68, 0.15, 0.95),
+        # Board texture bet sizing
+        dry_board_bet_size=num("dry_board_bet_size", 0.40 if is_maniac else (0.28 if is_nit else 0.33), 0.15, 0.60),
+        wet_board_bet_size=num("wet_board_bet_size", 0.88 if is_maniac else (0.68 if is_nit else 0.75), 0.45, 0.98),
         # Tournament traits
         safety=0.65 if is_nit else (0.25 if is_maniac else 0.45),
         attack=min(0.98, max(0.30, af / 10.0 + 0.35)),
@@ -312,12 +329,19 @@ class StrategyTrainer:
         "thin_value_threshold": (0.48, 0.72),
         "raise_threshold": (0.52, 0.75),
         "jam_threshold": (0.80, 0.98),
+        # Street-specific thresholds
+        "flop_value_threshold": (0.45, 0.72),
+        "turn_value_threshold": (0.52, 0.80),
+        "river_value_threshold": (0.60, 0.88),
         # Bet sizing
         "open_size": (2.0, 3.5),
         "cbet_size": (0.28, 0.85),
         "value_bet_size": (0.40, 1.00),
         "bluff_bet_size": (0.30, 0.85),
         "raise_size": (0.45, 1.10),
+        # Board texture bet sizing
+        "dry_board_bet_size": (0.20, 0.55),
+        "wet_board_bet_size": (0.50, 0.95),
         # Tournament adaptation
         "safety": (0.20, 0.80),
         "attack": (0.30, 0.95),
@@ -333,12 +357,15 @@ class StrategyTrainer:
         # Enforce poker logical monotonicity invariants
         d["thin_value_threshold"] = min(d["thin_value_threshold"], d["value_threshold"] - 0.04)
         d["jam_threshold"] = max(d["jam_threshold"], d["value_threshold"] + 0.06)
+        d["turn_value_threshold"] = max(d["turn_value_threshold"], d["flop_value_threshold"] + 0.02)
+        d["river_value_threshold"] = max(d["river_value_threshold"], d["turn_value_threshold"] + 0.02)
         d["bluff_bet_size"] = min(d["bluff_bet_size"], d["value_bet_size"])
+        d["wet_board_bet_size"] = max(d["wet_board_bet_size"], d["dry_board_bet_size"] + 0.10)
 
     def mutate(self, p, sigma):
         d = asdict(p)
         for k in self.FIELDS:
-            scale = sigma * (.55 if k in {"value_threshold", "thin_value_threshold", "raise_threshold", "jam_threshold"} else .35 if k == "open_size" else 1.0)
+            scale = sigma * (.55 if k in {"value_threshold", "thin_value_threshold", "raise_threshold", "jam_threshold", "flop_value_threshold", "turn_value_threshold", "river_value_threshold"} else .35 if k == "open_size" else 1.0)
             d[k] += self.rng.gauss(0, scale)
         self._clamp_and_validate(d)
         return StrategyParams(**d)
@@ -453,13 +480,10 @@ class StrategyTrainer:
                     pass
             if history:
                 start_gen = history[-1]["generation"]
-                champion = StrategyParams(**history[-1]["params"])
+                champion = _load_params_safe(history[-1]["params"])
                 champion_metrics = history[-1]["metrics"]
                 # Hall of fame = the strongest champions on record, not the most recent.
-                # An archive can decay late -- here gen_016 peaked at fitness 0.51 while
-                # gen_021 fell to 0.14 -- so seeding the opponent pool from the tail
-                # would fill it with the worst strategies the run ever produced.
-                hall = [(h["metrics"]["fitness"], StrategyParams(**h["params"]))
+                hall = [(h["metrics"]["fitness"], _load_params_safe(h["params"]))
                         for h in sorted(history, key=lambda x: -x["metrics"]["fitness"])[:self.HALL_SIZE]]
                 print(f"[Training] 发现历史存档！从 Generation {start_gen} 自动恢复续训 (已有历史: {len(history)} 代, 当前最强 Fitness: {champion_metrics['fitness']:.4f})", flush=True)
 
@@ -468,13 +492,13 @@ class StrategyTrainer:
             if isinstance(base_model, StrategyParams):
                 base_params = replace(base_model)
             elif isinstance(base_model, dict):
-                base_params = StrategyParams(**base_model.get("params", base_model))
+                base_params = _load_params_safe(base_model.get("params", base_model))
             elif isinstance(base_model, (str, Path)):
                 bp = Path(base_model)
                 if bp.exists():
                     try:
                         d = json.loads(bp.read_text(encoding="utf-8"))
-                        base_params = StrategyParams(**d.get("params", d))
+                        base_params = _load_params_safe(d.get("params", d))
                     except Exception as e:
                         print(f"[Training] 警告: 加载初始底模 {base_model} 失败: {e}", flush=True)
             if base_params is not None:
@@ -482,23 +506,13 @@ class StrategyTrainer:
                 hall = [(0.50, replace(base_params))]
                 print(f"[Training] 成功加载初始底模: {base_model}！第一代种群将基于该模型微调繁衍", flush=True)
 
-        # Best-ever tracking for stagnation detection. The old schedule shrank the
-        # mutation step size purely as a function of generation count (0.92**g), so
-        # once it decayed near its floor the population could no longer escape a bad
-        # draw -- a run of unlucky generation winners just got refined in place,
-        # walking the champion into a worse and worse corner of the search space with
-        # no way back (this is exactly what happened between gen_016 and gen_020,
-        # where vpip drifted from 0.036 down to 0.094 while fitness fell 0.51 -> 0.12).
-        # Tracking the best fitness ever seen -- separate from "current champion" --
-        # and re-widening sigma (and reseeding from the best-ever params) after a run
-        # of generations that fail to beat it gives the search a way out.
         best_ever_metrics = champion_metrics
         best_ever_champion = champion
         if history:
             for h in history:
                 if best_ever_metrics is None or h["metrics"]["fitness"] > best_ever_metrics["fitness"]:
                     best_ever_metrics = h["metrics"]
-                    best_ever_champion = StrategyParams(**h["params"])
+                    best_ever_champion = _load_params_safe(h["params"])
         stagnation_count = 0
 
         # Resuming into the archive's *last* generation is not the same as resuming

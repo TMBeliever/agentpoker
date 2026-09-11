@@ -162,8 +162,10 @@ def main():
     bt.add_argument('--equity-samples',type=int,default=0,help='胜率采样数 (默认 0 查表)')
     bt.add_argument('--workers',type=int,default=0,help='并发进程数 (0 为自动多核)')
     bt.add_argument('--seed',type=int,default=42,help='随机数种子')
-    bt.add_argument('--non-interactive',action='store_true',help='非交互模式：直接根据命令行参数执行')
     bt.add_argument('--save-report',default=None,help='将完整战报与矩阵保存为 JSON 文件')
+    dash=sub.add_parser('dashboard',help='启动全能轻量级可视化 Web 控制台 (训练、比赛、换桌、战报复盘)')
+    dash.add_argument('--port',type=int,default=8080,help='控制台监听端口，默认 8080')
+    dash.add_argument('--host',default='0.0.0.0',help='监听地址，0.0.0.0 支持远程服务器访问')
     args=p.parse_args()
     if args.cmd=='simulate':
         names=list(ARCHETYPES); agents=[]
@@ -368,4 +370,7 @@ def main():
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"[战报已保存] {p.resolve()}")
+    elif args.cmd == 'dashboard':
+        from .dashboard import run_server
+        run_server(host=args.host, port=args.port)
 if __name__=='__main__': main()

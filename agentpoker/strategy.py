@@ -22,12 +22,19 @@ class StrategyParams:
     thin_value_threshold: float = 0.57
     raise_threshold: float = 0.61
     jam_threshold: float = 0.91
+    # Street-specific value thresholds
+    flop_value_threshold: float = 0.58
+    turn_value_threshold: float = 0.65
+    river_value_threshold: float = 0.74
     # Bet sizing
     open_size: float = 2.35
     cbet_size: float = 0.47
     value_bet_size: float = 0.69
     bluff_bet_size: float = 0.55
     raise_size: float = 0.68
+    # Board texture bet sizing
+    dry_board_bet_size: float = 0.33
+    wet_board_bet_size: float = 0.75
     # Tournament adaptation
     safety: float = 0.45
     attack: float = 0.70
@@ -228,6 +235,11 @@ class StrategyAgent:
         facing_bet = call > 0
         strength = equity
         street = len(board)
+        # Blocker effect detection: nut flush blocker on 3+ flush boards
+        eval_meta = evaluate_relative_strength(hero, board)
+        blocker = eval_meta.get("blocker_effects") or {}
+        has_nut_flush_blocker = bool(blocker.get("has_nut_flush_blocker", False))
+
         # Flop bet after hero raised preflop is a continuation bet, priced by cbet_size.
         is_cbet = self._hero_is_aggressor and street == 3
         # Street-specific aggression frequency drives barrelling.
@@ -257,8 +269,19 @@ class StrategyAgent:
             if "fold" in legal:
                 return {"type": "fold"}
 
-        # Strong value hands: raise or bet
-        value_cut = self.params.value_threshold - 0.06 * pressure
+        # Strong value hands: raise or bet with street-specific thresholds
+        if street == 3:
+            street_cut = self.params.flop_value_threshold
+        elif street == 4:
+            street_cut = self.params.turn_value_threshold
+        elif street >= 5:
+            street_cut = self.params.river_value_threshold
+        else:
+            street_cut = self.params.value_threshold
+
+        value_cut = street_cut - 0.06 * pressure
+        if self.params.value_threshold != 0.68:
+            value_cut += (self.params.value_threshold - 0.68) * 0.4
         if villain.get("is_station"):
             # Stations call down with weaker holdings: widen value betting range
             value_cut -= 0.04
@@ -266,8 +289,8 @@ class StrategyAgent:
         if strength >= value_cut:
             size_boost = 1.15 if villain.get("is_station") else 1.0
             if "raise" in legal and self._should_aggress(self.params.raise_threshold + 0.04 * texture["wetness"], pressure, strength):
-                return self._sized_raise(legal, strength=strength, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size)
-            if "bet" in legal and self._should_aggress(0.55, pressure, strength):
+                return self._sized_raise(legal, strength=strength, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
+            if "bet" in legal and self._should_aggress(0.68, pressure, strength):
                 return self._sized_bet(legal, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, street=street, is_cbet=is_cbet, wetness=texture["wetness"])
             if "call" in legal:
                 return {"type": "call"}
@@ -277,14 +300,15 @@ class StrategyAgent:
         # Semi-bluffs / draws
         draw_bias = texture["draws"]
         semi_threshold = max(0.29, pot_odds * 0.80)
-        if strength >= semi_threshold and (draw_bias > 0 or strength > self.params.thin_value_threshold):
+        thin_cut = max(self.params.thin_value_threshold, value_cut - 0.08)
+        if strength >= semi_threshold and (draw_bias > 0 or strength > thin_cut):
             semi_cbet = aggression_freq * (0.65 + 0.5 * pressure)
             if villain.get("fold", 0.52) > 0.58:
                 semi_cbet *= 1.25
             if ("raise" in legal or "bet" in legal) and self._noise(semi_cbet):
                 # _sized_raise picks the right action type for the spot (bet when first
                 # to act, raise when facing one).
-                return self._sized_raise(legal, strength=strength, value=False, pressure=pressure, pot=pot, bb_size=bb_size)
+                return self._sized_raise(legal, strength=strength, value=False, pressure=pressure, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
             if "call" in legal and strength >= pot_odds * 0.88:
                 return {"type": "call"}
 
@@ -297,8 +321,17 @@ class StrategyAgent:
         elif villain.get("fold", 0.52) > 0.58:
             bluff_rate *= 1.35  # High fold equity
 
+        # River blocker effect: nut flush blocker eliminates opponent's nut hands
+        if street >= 5 and has_nut_flush_blocker:
+            if villain.get("is_station"):
+                # Maintain disciplined defense: never bluff calling stations even with nut blockers
+                bluff_rate *= 0.10
+            else:
+                # River polarized bluff: holding the nut flush blocker makes bluffs much higher equity
+                bluff_rate = max(bluff_rate, min(0.42, self.params.river_bluff_frequency * 2.0 + 0.12))
+
         if "raise" in legal and self._noise(bluff_rate):
-            return self._sized_raise(legal, strength=max(strength, 0.25), value=False, pressure=pressure, pot=pot, bb_size=bb_size)
+            return self._sized_raise(legal, strength=max(strength, 0.25), value=False, pressure=pressure, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
         if "bet" in legal and self._noise(bluff_rate):
             return self._sized_bet(legal, value=False, pressure=pressure, pot=pot, bb_size=bb_size, street=street, wetness=texture["wetness"])
 
@@ -306,6 +339,9 @@ class StrategyAgent:
         call_cut = max(0.20, pot_odds * (0.95 - 0.08 * pressure))
         if villain.get("is_maniac"):
             call_cut -= 0.04
+        if street >= 5 and has_nut_flush_blocker and not villain.get("is_nit"):
+            # Nut flush blocker makes opponent's river bet polarized air -> widen bluff-catching range
+            call_cut -= 0.05
         if "call" in legal and strength >= call_cut:
             return {"type": "call"}
         if "check" in legal:
@@ -517,7 +553,7 @@ class StrategyAgent:
         p = base + 0.15 * max(0.0, pressure) + 0.10 * max(0.0, strength - 0.7)
         return self._noise(max(0.05, min(0.98, p)))
 
-    def _sized_raise(self, legal: dict[str, Any], strength: float = 0.5, value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0) -> dict[str, Any]:
+    def _sized_raise(self, legal: dict[str, Any], strength: float = 0.5, value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0, wetness: float | None = None) -> dict[str, Any]:
         spec = legal.get("raise", legal.get("bet"))
         if not spec:
             return {"type": "allIn"} if "allIn" in legal else {"type": "call"}
@@ -529,9 +565,13 @@ class StrategyAgent:
             return {"type": action_type, "amount": hi}
         if strength >= self.params.jam_threshold and (pressure > 0.2 or value):
             return {"type": "allIn"} if "allIn" in legal else {"type": action_type, "amount": hi}
-        # raise_size is the genome's dedicated raise-sizing knob (previously dead: this
-        # branch read value_bet_size, so evolving raise_size changed nothing).
+        # raise_size is the genome's dedicated raise-sizing knob
         base = self.params.raise_size if value else self.params.bluff_bet_size
+        if wetness is not None:
+            w = max(0.0, min(1.0, float(wetness)))
+            # Wet board raises slightly larger to charge draws; dry board raises smaller
+            texture_raise_bias = (self.params.wet_board_bet_size - self.params.dry_board_bet_size) * (w - 0.5) * 0.25
+            base = max(0.25, base + texture_raise_bias)
         frac = (base + 0.10 * max(0.0, pressure) + 0.12 * max(0.0, strength - 0.75)) * size_mult
         if pot > 0:
             target = int(lo + pot * frac * 0.5)
@@ -549,16 +589,19 @@ class StrategyAgent:
             if "allIn" in legal:
                 return {"type": "allIn"}
             return {"type": action_type, "amount": hi}
+
+        # Dynamic board texture sizing: smoothly interpolate between dry and wet board bet sizes
+        w = 0.5 if wetness is None else max(0.0, min(1.0, float(wetness)))
+        texture_size = self.params.dry_board_bet_size + (self.params.wet_board_bet_size - self.params.dry_board_bet_size) * w
+
         if is_cbet and street == 3:
-            # Continuation bet, sized by the genome's cbet_size knob (also previously
-            # dead -- flop c-bets were priced with value_bet_size).
-            base = self.params.cbet_size
+            # Continuation bet: blend cbet_size with board texture sizing
+            base = 0.45 * self.params.cbet_size + 0.55 * texture_size
         else:
-            base = self.params.value_bet_size if value else self.params.bluff_bet_size
-        wet_factor = 1.0
-        if wetness is not None:
-            wet_factor = 0.85 if wetness <= 0.3 else (1.15 if wetness >= 0.8 else 1.0)
-        frac = (base + 0.08 * max(0.0, pressure)) * size_mult * wet_factor
+            bet_genome = self.params.value_bet_size if value else self.params.bluff_bet_size
+            base = 0.40 * bet_genome + 0.60 * texture_size
+
+        frac = (base + 0.08 * max(0.0, pressure)) * size_mult
         if pot > 0:
             target = int(max(pot * frac, bb_size))
         else:

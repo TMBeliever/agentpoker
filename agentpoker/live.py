@@ -113,6 +113,20 @@ class LiveRunner:
                     self._leave(obs)
                     return
 
+                # Remote table switch trigger (e.g. from Web Dashboard)
+                switch_flag = Path("data/.switch_table_flag")
+                if switch_flag.exists():
+                    try:
+                        switch_flag.unlink()
+                    except Exception:
+                        pass
+                    if obs.get('table') or self.table_id:
+                        print("\n[Live] ⚡ 收到换桌控制台指令，正在离开当前牌桌重新匹配...", flush=True)
+                        self._leave(obs)
+                        self.table_id = None
+                        obs = self._observe_competition()
+                        continue
+
                 status = obs.get('status')
                 cstatus = obs.get('competitionStatus')
 
