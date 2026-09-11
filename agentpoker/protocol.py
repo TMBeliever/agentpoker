@@ -34,7 +34,13 @@ class Config:
 
 class AgentPokerClient:
     def __init__(self,cfg:Config|None=None):
-        self.cfg=cfg or Config(); self.s=requests.Session(); self.agent_id=None
+        self.cfg=cfg or Config(); self.s=requests.Session()
+        # Bypass the OS/env proxy entirely -- this client only ever talks to the
+        # configured Agent Poker API host, and a stale system proxy (e.g. a VPN
+        # tool pointing at a dead local port) should never be able to break it.
+        self.s.trust_env = False
+        self.s.proxies = {}
+        self.agent_id=None
     def _headers(self):
         h={'Content-Type':'application/json','Accept':'application/json'}
         if self.cfg.key: h['Authorization']=f'Bearer {self.cfg.key}'

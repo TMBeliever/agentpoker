@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 from pathlib import Path
 import json, math, random, statistics
+from typing import Any
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
@@ -310,7 +311,7 @@ class StrategyTrainer:
     def _opponents(self, focal, population, hall, seed):
         return self._draw_pool(population, hall, seed, self._train_profile_params, exclude=focal)
 
-    def _score_population(self,pop,hall,generation,runs,pool=None,seed_base=None):
+    def _score_population(self,pop,hall,generation,runs,pool=None,seed_base=None,label="评估"):
         # Common random numbers: one opponent line-up and one seed base shared by every
         # candidate in the batch, so differences between candidates reflect skill rather
         # than each candidate drawing its own deals and its own opponents.
@@ -320,15 +321,27 @@ class StrategyTrainer:
             seed_base=self.seed+generation*1000003
         tasks=[(p,pool,seed_base,runs,self.equity_samples) for p in pop]
         workers=self.workers or min(8,len(tasks))
+        n=len(tasks)
+        print(f"  [{label}] {n} 个候选 × {runs} 场 ({workers} 核并发)...", flush=True)
         if workers<=1:
-            return [(_evaluate_worker(t),p) for t,p in zip(tasks,pop)]
+            results=[]
+            for i,(t,p) in enumerate(zip(tasks,pop)):
+                m=_evaluate_worker(t)
+                print(f"    候选 {i+1:02d}/{n:02d} fit={m['fitness']:.4f} top12={m['top12_rate']:.2f} rank={m['avg_rank']:.1f}", flush=True)
+                results.append((m,p))
+            return results
         results=[None]*len(tasks)
+        completed=0
         with ProcessPoolExecutor(max_workers=workers) as ex:
             futs={ex.submit(_evaluate_worker,t):i for i,t in enumerate(tasks)}
-            for fut in as_completed(futs): results[futs[fut]]=fut.result()
+            for fut in as_completed(futs):
+                idx=futs[fut]; results[idx]=fut.result(); completed+=1
+                m=results[idx]
+                print(f"    候选 {completed:02d}/{n:02d} fit={m['fitness']:.4f} top12={m['top12_rate']:.2f} rank={m['avg_rank']:.1f}", flush=True)
         return list(zip(results,pop))
 
-    def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True,reeval_runs=24):
+    def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True,reeval_runs=24,
+            stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01):
         ap=Path(archive); ap.mkdir(parents=True,exist_ok=True)
         start_gen=0; history=[]; hall=[]; champion=None; champion_metrics=None
 
@@ -355,6 +368,25 @@ class StrategyTrainer:
                 hall = hall[-12:]
                 print(f"[Training] 发现历史存档！从 Generation {start_gen} 自动恢复续训 (已有历史: {len(history)} 代, 当前最强 Fitness: {champion_metrics['fitness']:.4f})", flush=True)
 
+        # Best-ever tracking for stagnation detection. The old schedule shrank the
+        # mutation step size purely as a function of generation count (0.92**g), so
+        # once it decayed near its floor the population could no longer escape a bad
+        # draw -- a run of unlucky generation winners just got refined in place,
+        # walking the champion into a worse and worse corner of the search space with
+        # no way back (this is exactly what happened between gen_016 and gen_020,
+        # where vpip drifted from 0.036 down to 0.094 while fitness fell 0.51 -> 0.12).
+        # Tracking the best fitness ever seen -- separate from "current champion" --
+        # and re-widening sigma (and reseeding from the best-ever params) after a run
+        # of generations that fail to beat it gives the search a way out.
+        best_ever_metrics = champion_metrics
+        best_ever_champion = champion
+        if history:
+            for h in history:
+                if best_ever_metrics is None or h["metrics"]["fitness"] > best_ever_metrics["fitness"]:
+                    best_ever_metrics = h["metrics"]
+                    best_ever_champion = StrategyParams(**h["params"])
+        stagnation_count = 0
+
         if champion is not None:
             pop = [replace(champion)]
             while len(pop) < population:
@@ -371,7 +403,25 @@ class StrategyTrainer:
         re_ranked = [(champion_metrics, champion)] if champion is not None else None
 
         for g in range(start_gen, start_gen + generations):
-            sigma=max(.012,.075*(.92**g))
+            base_sigma=max(.012,.075*(.92**g))
+            sigma=base_sigma
+            restarted=False
+            if stagnation_count >= stagnation_patience and best_ever_champion is not None:
+                # Widen the search and jump back to the best-ever champion instead of
+                # continuing to refine whatever the last few unlucky generations left
+                # us with. This is the escape hatch for early convergence: sigma alone
+                # decaying to its floor never recovers on its own once the population
+                # has drifted into a bad corner.
+                sigma = min(0.075, base_sigma * stagnation_sigma_boost)
+                champion = replace(best_ever_champion)
+                pop = [replace(champion)]
+                while len(pop) < population:
+                    pop.append(self.mutate(champion, sigma))
+                restarted = True
+                stagnation_count = 0
+                print(f"[Training] 检测到连续 {stagnation_patience} 代无提升，触发多样性重启："
+                      f"从历史最优 (fitness={best_ever_metrics['fitness']:.4f}) 重新分裂种群，sigma {base_sigma:.4f}->{sigma:.4f}", flush=True)
+
             scored=self._score_population(pop,hall,g,runs_per_candidate)
             ranked=_rank(scored)
             elite_n=max(3,population//4)
@@ -387,11 +437,19 @@ class StrategyTrainer:
             champion_metrics,champion=re_ranked[0]
             in_sample=dict(ranked[0][0])
             history.append({"generation":g+1,"sigma":sigma,"params":asdict(champion),
-                            "metrics":champion_metrics,"in_sample_metrics":in_sample})
+                            "metrics":champion_metrics,"in_sample_metrics":in_sample,"restarted":restarted})
+
+            if best_ever_metrics is None or champion_metrics["fitness"] > best_ever_metrics["fitness"] + stagnation_min_delta:
+                best_ever_metrics = champion_metrics
+                best_ever_champion = champion
+                stagnation_count = 0
+            else:
+                stagnation_count += 1
+
             print(f"gen={g+1:03d} fitness={champion_metrics['fitness']:.4f}±{champion_metrics.get('fitness_se',0.0):.4f} "
                   f"top12={champion_metrics['top12_rate']:.3f} final={champion_metrics['final_rate']:.3f} "
                   f"champ={champion_metrics['champion_rate']:.3f} avg_rank={champion_metrics['avg_rank']:.2f} "
-                  f"(in-sample best {in_sample['fitness']:.4f})", flush=True)
+                  f"(in-sample best {in_sample['fitness']:.4f}) [best_ever={best_ever_metrics['fitness']:.4f} 停滞={stagnation_count}/{stagnation_patience}]", flush=True)
             hall.append(champion); hall=hall[-12:]
             new=elites[:]
             while len(new)<population:
@@ -403,7 +461,8 @@ class StrategyTrainer:
         if re_ranked is None:
             raise ValueError("fit() requires generations >= 1 (or an existing checkpoint to resume from)")
 
-        # Elite Parameter Smoothing for maximum stability against variance
+        # Elite Parameter Smoothing: average top-k elites as a candidate, then
+        # race it against the best raw elite on the holdout pool and keep the winner.
         elite_candidates = [p for _, p in re_ranked[:max(3, population // 4)]]
         avg_dict = {}
         for k in self.FIELDS:
@@ -411,14 +470,23 @@ class StrategyTrainer:
             avg_dict[k] = sum(vals) / len(vals)
         stable_champion = StrategyParams(**avg_dict)
 
-        # Held-out validation: opponents this population was never selected against.
-        final_payload = (stable_champion, self._holdout_pool(), self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
+        holdout_pool = self._holdout_pool()
+        final_payload = (stable_champion, holdout_pool, self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
         final_metrics = _evaluate_worker(final_payload)
+
+        best_elite_payload = (champion, holdout_pool, self.seed + 987654321, max(1, final_race), max(0, self.equity_samples))
+        best_elite_metrics = _evaluate_worker(best_elite_payload)
+
+        if best_elite_metrics["fitness"] > final_metrics["fitness"]:
+            final_champ = champion
+            final_metrics = best_elite_metrics
+        else:
+            final_champ = stable_champion
+
         # Training-distribution reference, for the train/holdout gap.
-        train_payload = (stable_champion, self._draw_pool(pop, hall, self.seed*31337, self._train_profile_params),
+        train_payload = (final_champ, self._draw_pool(pop, hall, self.seed*31337, self._train_profile_params),
                          self.seed + 123456789, max(1, final_race), max(0, self.equity_samples))
         train_metrics = _evaluate_worker(train_payload)
-        final_champ = stable_champion if final_metrics["fitness"] >= 0.70 or final_metrics["fitness"] >= champion_metrics["fitness"] * 0.90 else champion
 
         print(f"[Training] 完成本轮演化 (累计到达 Gen {start_gen + generations}).", flush=True)
         print(f"[Training] 留出集验证 fitness={final_metrics['fitness']:.4f}±{final_metrics.get('fitness_se',0.0):.4f} "

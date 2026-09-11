@@ -1,303 +1,106 @@
-# AgentPoker AI Arena — Final v2.0
+# AgentPoker AI Arena
 
-面向 Agent Poker 赛事的**全自适应策略进化型 NLHE Agent**。
-本系统不是训练一个脱离赛制的“泛化扑克模型”，而是针对官方真实锦标赛赛制（瑞士制排位 + Top 12 晋级 + 决赛圈争霸）以及线上无限训练场深度定制调优的竞技级策略解决方案。
+面向 Agent Poker 赛事的无限注德州扑克（NLHE）锦标赛 Agent，基于进化策略训练，支持真实对手画像剥削。
 
-- **预赛规则**：10 轮 × 每轮 20 手 = 200 手
-- **分桌机制**：R1~R3 随机分桌；R4~R10 严格按上一轮累计 BB/100 瑞士积分动态分桌
-- **晋级赛制**：Top 12 晋级 A/B 双桌半决赛（各 20 手，前三晋级），前 6 名杀入总决赛（30 手）
-- **官方排名指标**：净收益与 **BB/100**
+## 赛制
 
----
+- **预赛**：10 轮 × 20 手 = 200 手，R1~R3 随机分桌，R4~R10 瑞士积分动态分桌
+- **晋级**：Top 12 → A/B 双桌半决赛（各 20 手，前三晋级）→ 总决赛（30 手）
+- **排名指标**：净收益 / BB/100
 
-## 🌟 核心技术架构与优化成果
-
-### 1. 牌力评估与胜率标定 ([cards.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/cards.py) & [calibration.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/calibration.py))
-- **快速 7 张牌评估**：`rank7` 直接判定（同花/顺子用位集检测，其余按牌型分组），替代 `C(7,5)=21` 次枚举。6 万次与暴力枚举对拍**完全一致**，快 **13.6×**；
-- **细分牌型识别**：超对、顶对顶踢、弱底对、板面对子；暗三条（Set）vs 板面明三条（Trips）；
-- **听牌感知**：坚果同花听牌、双头顺（OESD）、卡顺（Gutshot）折算补牌权益；
-- **⚠️ 胜率标定（新增，修正量纲错误）**：`evaluate_relative_strength` 输出的是 0~1 的**启发式分数**，不是胜率，也不含对手人数——而策略此前把它**直接与底池赔率比较**。现由离线蒙特卡洛标定表（`scratch/build_calibration.py` 生成 `calibration_data.py`）按 **街 × 对手数** 映射为真实胜率：
-  - 169 个起手牌类的**百分位排名**（AA=1.00 最强，32o=0.00 最弱，AKs 0.958 > AKo 0.941）；
-  - 15 组 (街, 对手数) 的强度→胜率映射，单调且对手越多胜率越低（如河牌满值牌型对 1 人 0.964、对 5 人 0.800）；
-  - 运行时查表，保持微秒级开销。**这是让 `vpip` 等参数真正可控的前提**。
-
-### 2. 真实对手画像与贝叶斯动态剥削 ([profiler.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/profiler.py) & [strategy.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/strategy.py))
-- **S10 全量 4,583 手数据清洗**：自动剔除手数不足 30 手及挂机弃牌号，保留 **59 位高置信度真实选手画像**（`models/opponent_profiles.json`）；
-- **贝叶斯平滑（Bayesian Shrinkage）**：伪计数大盘先验平滑小样本抖动，未知选手退化为安全平衡型；
-- **针对性分类剥削**：跟注站压制诈唬、极紧手高频偷盲、狂徒设伏诱捕等分支按画像切换；
-- **⚠️ 下注尺度提取（新增，修复参数锁死）**：此前 `profile_to_params` 把 23 个行为参数中的 **11 个（含全部下注尺度）锁死为默认值**，59 位真实对手的下注尺度完全相同——而尺度恰恰是真人最好剥削的维度。现在从真实 `amount` 序列按底池比例提取：
-  - `open_size_bb`（开局加注，中位 **2.65 BB**，模型旧默认 2.35 偏小）、`cbet_size`、`value_bet_size`、`raise_size`；
-  - 59 位选手现在产生 **22/23 个参数各不相同**的真实参数组。
-- **⚠️ 模拟器内画像修复**：此前 `_observe_opponents` 每次决策重扫全量历史，同一动作被重复计数（某对手 200 手被记 46,866 次加注），`hands` 恒为 0 → 平滑分母失效 → 所有对手被判为同一类型。现改为游标增量消费，每手每对手只记一次。
-
-### 3. 参数化下注尺度与短码推推乐 ([strategy.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/strategy.py))
-- **底池比例控注**：开池、C-bet、价值下注、诈唬、加注各有独立尺度参数，由进化与真实画像共同决定；
-- **⚠️ 死参数接线（新增）**：审计发现 23 个参数中有 **6 个从不影响任何决策**——`vpip`、`squeeze_frequency`、`turn_barrel_frequency`、`cbet_size`、`raise_size`、`bubble_aggression`。后果是**所有原型都打约 80% 入池率**（实测），进化在 6 个惰性维度上空转，原型区分度形同虚设。现已全部接入决策逻辑，实测入池率与 `vpip` 参数几乎 1:1：
-
-  | 原型 | nit | tight | balanced | lag | station | maniac |
-  | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-  | 参数 vpip | 0.14 | 0.18 | 0.23 | 0.31 | 0.43 | 0.48 |
-  | 实测入池率 | 0.15 | 0.19 | 0.24 | 0.38 | 0.45 | 0.52 |
-
-  测试 `test_strategy_params_live.py` 会在此回归时失败。
-- **短码 Push/Fold**：有效筹码 $\le 12 \text{ BB}$ 时进入推推乐，推注范围由 `vpip` 与位置共同决定；
-
-### 4. 线上训练赛【原地 20 手切轮与 200 手虚拟锦标赛飞轮】 ([live.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/live.py))
-- **不断流原地切轮**：Agent 始终留在桌上，避免频繁退桌重排与网络重连；
-- **20 手自动切轮结算**：每满 20 手打印轮次面板（净 BB、BB/100、所处阶段）；
-- **锦标赛上下文统一**：训练与实战的 `tournamentContext` 现在通过**同一个构造器** ([context.py](file:///Users/liang/Downloads/agentpoker_final%202/agentpoker/context.py)) 生成。此前 live 侧把 bb100 离散成 5 档硬编码 rank（3/8/12/16/21）并把黄金线写死为 20.0/15.0，而模拟器用真实排名——**策略被训练在一个信号上、部署在另一个信号上**。现在优先读取真实 standings；取不到时用 `scratch/build_context_ladder.py` 从模拟锦标赛标定出的 bb100→名次阶梯（同一套语义）；
-- **画像免重启热重载**：每 20 手后台自动解析刚打完的对局，实时热更新同桌对手画像。
-
----
-
-## ⚠️ 引擎正确性修复（2026-09-11）— 此前所有战报作废
-
-在 v2.0 的战报发布后，对评测引擎做了一轮正确性审计，发现 **3 个确凿的引擎 bug**。修复前，所有训练与评估数字（下表及历史 README）都建立在错误的引擎之上，**不可采信**。
-
-### 已修复的 bug
-
-| # | 位置 | 问题 | 影响 |
-| :-: | :--- | :--- | :--- |
-| 1 | `engine.py:_settle` | 未跟注注额被重复计算（`p.stack += excess` 与 `returned[aid] += excess` 同时记账，`final_stacks` 又相加一次） | **凭空造币**。单场 24 人锦标赛造币 **+1,110,465 BB**，24 人 BB/100 总和为 **+367,137**（零和应为 0）——一场比赛里所有人都在赢钱 |
-| 2 | `engine.py:play_hand` | 无论是否面对下注，`legal` 都包含 `"check"`，且 `check` 被当作免费过牌直接放过 | 实测 **99.3% 的 check 决策发生在面对下注时**（12,490 / 12,582）——不弃牌、不付钱、白看下一张 |
-| 3 | `strategy.py:_observe_opponents` | 每次决策重扫全量动作历史并累加计数（O(n²)），且 `hands` / `vpip` 从不累加 | 200 手里某对手被记成 **46,866 次 raise**；平滑分母恒为 0 → 所有对手被判定为同一类型，剥削层形同虚设 |
-
-另修复两处一致性问题：
-- 引擎的 `legal` 从来只提供 `raise`、不提供 `bet`，但**真实 API 有独立的 `bet` 动作**（4,583 手真实数据中 2,651 次）→ 策略的下注分支在模拟器里从不触发（训练/实战不一致）。
-- `profile_to_params` 把 23 个行为参数中的 **11 个（含全部下注尺度）锁死为默认值**，59 位真实对手的下注尺度完全相同。
-
-### 修复的验证结果
-
-```
-筹码守恒     混合策略 6000 手 + 随机策略 6000 手 → 造币手数 0
-动作合法性   9,847 次决策 → 非法动作 0
-锦标赛零和   24 人预赛 BB/100 总和 = +0.00
-性能         单场锦标赛 30.12s → 0.76s (约 40×)
-```
-
-可复跑：`.venv/bin/python scratch/verify_fixes.py`（22 项检查）
-
-### 旧 Gen4 冠军在修复后引擎上的实测，与重训结果对比
-
-同一引擎、同一对手池、同一批种子，各 30 场配对比较：
-
-| 模型 | fitness | Top 12 出线率 | 决赛桌率 | 平均名次 | 均场 BB/100 |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| 旧 Gen4（旧 README 宣称 100% 出线 / +68,418 BB/100） | 0.0447 ± 0.0265 | **6.7%** | 0.0% | 21.23 / 24 | **−363.9** |
-| **`models/champion_v3.json`（修复后重训 6 代）** | **0.4800 ± 0.0655** | **63.3%** | 33.3% | **10.50** | **+66.4** |
-
-> 说明：旧模型是在**错误的引擎**上进化出来的，参数专门适应了坏引擎的机制（"永不弃牌"在 bug 下有利可图），在正确引擎上崩溃是预期结果，而非"策略本身很差"。24 人场取前 12，随机基准出线率为 50%，新模型 63.3%。
-
-### ⚠️ 重训结果的方法论警示
-
-用修复后的引擎跑 6 代（16 种群 × 12 场/候选 + 精英复评 16 场），结果**没有可测量的代际进步**：
-
-| 代 | 复评 fitness | 样本内最优 | 差（选择偏差） |
-| :---: | :---: | :---: | :---: |
-| Gen 1 | 0.5033 ± 0.0962 | 0.5769 | 0.074 |
-| Gen 2 | 0.5316 ± 0.0772 | 0.6713 | **0.140** |
-| Gen 3 | 0.5543 ± 0.0818 | 0.5573 | 0.003 |
-| Gen 4 | 0.5236 ± 0.0743 | 0.6221 | 0.099 |
-| Gen 5 | 0.4795 ± 0.0921 | 0.6693 | **0.190** |
-| Gen 6 | 0.4737 ± 0.0888 | 0.6882 | **0.215** |
-
-两个结论：
-1. **置信区间全部重叠**，Gen1 → Gen6 的差异（0.5033 → 0.4737）在统计上不可区分。**"进化了 6 代所以更强"目前没有证据支持。**
-2. **样本内最优系统性地高于复评值**，且偏差随代数增大（0.074 → 0.215）——这正是"取噪声种群最大值"造成的选择偏差，会被精英复评如实揭露。**如果只看样本内数字，会误以为每代都在进步。**
-
-要让进化真正有意义，需要把 `--runs` 提到数百场/候选（当前默认 12 场时出线率标准误约 ±14 个百分点），或改用方差缩减手段（重要性采样、对手池固定化、以 BB/100 等连续指标替代 0/1 出线作为适应度）。
-
-### 关于旧"4 代进化"表的统计结论
-
-旧表声称 Gen1 → Gen4 的 fitness 提升（0.6367 → 0.7669）。从存档反推每代只跑了 **6 次**锦标赛，用精确解析方差检验：
-
-| 比较 | 观测差异 | 合并标准误 | z | 结论 |
-| :--- | :---: | :---: | :---: | :--- |
-| Gen1 → Gen4 | +0.1301 | 0.1372 | 0.95 | 不显著 |
-| Gen1 → Gen2 | +0.0556 | 0.1824 | 0.30 | 不显著 |
-| Gen1 → Gen3 | +0.0160 | 0.1806 | 0.09 | 不显著 |
-
-单次 run 翻转对 fitness 的影响就有 **0.0967** —— Gen1→Gen2 的"提升"还不到一次随机翻转。**四代之间的差异在统计上不可区分（p > 0.05）**。
-
-### 训练方法学修复
-
-| 问题 | 修复 |
-| :--- | :--- |
-| 每个候选用**不同种子 + 不同对手池**，选择噪声最大化 | **共同随机数(CRN)**：同一代所有候选打完全相同的牌局与对手，做配对比较 |
-| 冠军取噪声种群的最大值，报告值系统性偏高 | **精英复评**：top-N 用全新种子集与全新对手池重打分后再排序 |
-| `final_race` 的对手池仍含训练种群，不是留出集 | **留出集**：25% 真实画像 + 12 个扰动原型，训练中永不出现，仅用于最终验证 |
-| 只报点估计，掩盖"差异在噪声内" | 所有指标带**标准误与 95% 置信区间**，同时输出训练分布指标以观察过拟合差距 |
-
----
-
-## 快速安装与配置
-
-推荐使用 Python 3.11+ 与 `uv`：
+## 快速开始
 
 ```bash
-# 激活环境与依赖
-source .venv/bin/activate
-pip install -r requirements.txt
+# 安装依赖
+uv sync
 
-# 运行全量单元测试（42 项必须全绿）
-uv run pytest
+# 连接账号（写入 .env）
+uv run python -m agentpoker.cli connect
 
-# 端到端正确性验证（22 项：零和性、动作合法性、标定表、CRN、留出集…）
-uv run python scratch/verify_fixes.py
+# 开始对战
+uv run python -m agentpoker.cli live --strategy models/champion.json
 ```
 
----
-
-## 常用命令手册
-
-### 1. 评估策略（支持每 200 手战况实时输出 + 多核并发）
-
-现在评估命令已全面支持**每 200 手即时刷新战况**，并可通过 `--workers` 开启多核并发（10 场大锦标赛 25 秒跑完）：
+## 训练
 
 ```bash
-# 极速评估：10 场锦标赛、8 核并发、挂载真实对手画像
+# 快速版（约 40 分钟，6 代）
+GENERATIONS=6 RUNS_PER_CANDIDATE=60 REEVAL_RUNS=20 FINAL_RACE=100 \
+SAVE=models/champion_new.json \
+./run_train.sh --no-resume
+
+# 正式版（约 5-6 小时，30 代）
+SAVE=models/champion_new.json ./run_train.sh --no-resume
+
+# 针对真实对手画像的定向训练
+SAVE=models/champion_targeted.json uv run python -m agentpoker.cli train \
+  --track targeted --profiles models/opponent_profiles.json
+
+# 从已有存档续训（默认行为）
+./run_train.sh
+```
+
+训练过程实时输出每个候选的 fitness，每代结束输出汇总。
+
+## 评估
+
+```bash
+# 在真实对手画像上评估冠军模型
 uv run python -m agentpoker.cli evaluate \
   --strategy models/champion.json \
   --profiles models/opponent_profiles.json \
-  --runs 10 \
-  --agents 24 \
-  --workers 8
+  --runs 500
 ```
 
-终端实时输出示例：
-```text
-[评估开始] 正在启动 10 场锦标赛 (多核并发: 8 个工作进程)...
-[评估进度 01/10 | 200手结算] 单场: 预赛第 06 名 (+18.4 BB/100) | 赛果: 12强半决赛 | 累计走势: +18.4 BB/100 (出线率 100%, 夺冠率 0%)
-[评估进度 02/10 | 200手结算] 单场: 预赛第 03 名 (+42.1 BB/100) | 赛果: 决赛桌 第 2 名 | 累计走势: +30.2 BB/100 (出线率 100%, 夺冠率 0%)
-...
-```
-
-输出同时包含 `fitness_se` 与 `fitness_ci95`——**不要只读点估计**：24 人场、10 次跑动时出线率的标准误约 ±15 个百分点，小于该幅度的差异不能当作进步。
-
-```json
-{"top12_rate": 0.8, "final_rate": 0.3, "champion_rate": 0.1,
- "avg_rank": 9.4, "avg_bb100": 24.7, "fitness": 0.6281,
- "fitness_se": 0.1312, "fitness_ci95": [0.3710, 0.8852], "runs": 10}
-```
-
-### 2. 线上实战与训练赛（自适应原地切轮）
+## 对手画像
 
 ```bash
-# 1. 浏览器快速授权登录并保存凭证到 .env
-uv run python -m agentpoker.cli connect
+# 从本地手牌记录构建画像
+uv run python -m agentpoker.cli profile --input data/processed/hands.jsonl
 
-# 2. 启动线上挂机对决（自动激活：20手切轮、200手锦标赛飞轮、画像免重启热更）
-uv run python -m agentpoker.cli live \
-  --strategy models/champion.json \
-  --profiles models/opponent_profiles.json
+# 直接从 API 拉取手牌并构建
+uv run python -m agentpoker.cli profile --pull
 ```
 
-可选参数：
-- `--round-hands 20`：每轮结算手数（默认 20 手）
-- `--cycle-hands 200`：虚拟锦标赛赛季手数（默认 200 手）
-- `--max-hands 100`：打满指定手数自动离桌（默认 0 为无限连打）
-- `--no-auto-profile`：关闭每轮自动更新画像
+## 目录结构
 
-### 3. 双轨自训练演化（支持无缝断点续训）
-
-训练系统采用**双轨分立架构**，保证通用底蕴与赛场定向收割互不干扰：
-
-#### 轨 1：通用自演化基石轨（Universal Track）
-- **定位**：不带任何特定选手偏见，在全流派（松凶、紧凶、跟注站、岩石怪等）平衡博弈对抗中淬炼。
-- **自动断点续训**：检测 `--archive` 目录已有存档并自动续训。
-- **保存目标**：`models/champion_universal.json`（自动软同步更新 `models/champion.json`）。
-
-> ⚠️ **旧存档不可续训**：`models/archive/` 与 `models/archive_universal/` 中的 Gen 1~4 是**在含 bug 的引擎上进化出来的**，其参数专门适应了坏引擎的机制。以它们为起点续训会把这种污染带入新模型。修复引擎后请用 `--no-resume` 配一个全新的 `--archive` 目录从第 1 代重新演化。
-
-```bash
-# 全新演化基线模型（引擎修复后必须从第 1 代开始）
-uv run python -m agentpoker.cli train \
-  --track universal \
-  --generations 6 \
-  --population 16 \
-  --runs 12 \
-  --agents 24 \
-  --workers 8 \
-  --reeval-runs 16 \
-  --no-resume \
-  --archive models/archive_v3 \
-  --save models/champion_v3.json
 ```
-
-关键参数说明：
-- `--runs`：每个候选的锦标赛场次。**这是统计功效的来源**：出线率的标准误约为 `sqrt(p(1-p)/runs)`，10 次跑动时约 ±15 个百分点。若要分辨 5% 的差异，需要数百场。
-- `--reeval-runs`：精英复评场次。冠军取的是噪声种群的最大值，必须用独立种子重打分以消除选择偏差。
-- `--holdout-frac`：留出真实画像比例（默认 0.25），训练中永不出现，仅用于最终验证。
-
-#### 轨 2：赛场真实画像特训收割轨（Targeted Track）
-- **定位**：将真实 S10 赛场清洗出的 59 名活跃选手画像直接注入对手池，针对赛场普遍高频的激进偷盲、松散跟注与极度弃牌特征进行专门定向收割与反制。
-- **独立存档**： Checkpoint 独立保存在 `models/archive_targeted/`，输出模型为 `models/champion_targeted.json`。
-
-```bash
-# 启动针对 S10 真实画像的定向特训演化（多核并行）
-uv run python -m agentpoker.cli train \
-  --track targeted \
-  --profiles models/opponent_profiles.json \
-  --generations 6 \
-  --population 16 \
-  --runs 12 \
-  --agents 24 \
-  --workers 8 \
-  --no-resume
-```
-
-> **提示**：训练默认开启 `--resume`（自动断点续训）。若需清空历史从第 1 代全新演化，可追加 `--no-resume`。
->
-> **注意**：`--resume` 会把存档中的历史冠军作为下一代种群的起点。引擎或策略语义发生变化后，旧存档不再适用，务必 `--no-resume` + 新归档目录。
-
-### 4. 数据提取与对手画像重构
-
-```bash
-# 从线上比赛 API 拉取历史对局并自动清洗过滤 AFK 号生成画像
-uv run python -m agentpoker.cli profile \
-  --pull \
-  --competition-id <COMPETITION_ID> \
-  --min-hands 30 \
-  --out models/opponent_profiles.json
-```
-
----
-
-## ⚠️ 已知限制（诚实清单）
-
-1. **模拟器不是锦标赛**：10 轮 × 20 手实际是"每轮重置 100BB + 无限重买 + 盲注恒定"的现金局，没有升盲与淘汰。依赖它的 `safety` / `attack` / `bubble_aggression` / `late_aggression` 是在一套近似赛制上演化的。
-2. **标定表假设随机对手手牌**：胜率标定用均匀随机对手算出，真实对手有范围偏向。这是对"直接用启发式分数比底池赔率"的改进，但不是精确解。
-3. **对手模型只在有 `hands` 数据时有效**：真实画像（`hands > 0`）平滑正常；对完全未知的对手退化为先验。
-4. **`--runs` 决定统计功效**：默认 12 次跑动下出线率标准误约 ±14 个百分点。想在代际之间分辨 5% 的差异，需要数百场/候选——**不要用默认参数下的小差异宣称进步**。
-5. **下注尺度语义**：提取的 `open_size_bb` 只统计**每条街的第一次加注**（3-bet 不计入），3-bet 尺度目前没有单独建模。
-
----
-
-## 项目工程结构
-
-```text
 agentpoker/
-  cards.py        微秒级高精相对牌力、听牌感知与底池胜率评估
-  engine.py       本地 NLHE 快速仿真研究引擎
-  strategy.py     自适应博弈策略（位置加权、画像剥削、短码推推乐、气泡期压制）
-  tournament.py   瑞士制 10 轮 + 双桌半决赛 + 6 人总决赛赛制仿真器
-  training.py     多核遗传算法策略训练器与 ArenaEvaluator 考评系统（支持断点续训与画像注入）
-  profiler.py     对手历史对局画像提取与清洗器（贝叶斯平滑）
-  live.py         线上实战驱动（原地 20 手切轮、200 手赛季飞轮、画像热重载）
-  protocol.py     HTTP API 通信客户端与自动重试机制
-  cli.py          命令行总入口
+  strategy.py      # 决策核心，StrategyParams 参数化策略
+  training.py      # 进化训练：StrategyTrainer + ArenaEvaluator
+  tournament.py    # 锦标赛模拟器
+  engine.py        # NLHE 引擎（筹码守恒，zero-sum）
+  cards.py         # 牌力评估，rank7 快速 7 张牌判定
+  calibration.py   # 胜率标定表（强度分数 → 真实胜率）
+  profiler.py      # 真实对手画像构建
+  live.py          # 实战驱动
+  context.py       # 锦标赛压力信号（训练与实战统一路径）
 
 models/
-  champion.json             线上默认挂载的最优冠军策略
-  champion_universal.json   通用自演化基石冠军模型
-  champion_targeted.json    针对真实选手画像的定向特训冠军模型
-  opponent_profiles.json    清洗后的 59 位 S10 真实选手高质量画像库
-  archive_universal/        通用轨历代演化 Checkpoint (gen_001.json ~ gen_004.json ...)
-  archive_targeted/         画像特训轨独立演化 Checkpoint
+  champion.json             # 冠军模型（训练后生成）
+  archive/                  # 各代存档，支持续训
+  opponent_profiles.json    # 59 位真实选手画像
+```
 
-data/
-  processed/hands.jsonl     S10 真实采集的 4,583 手对局全量数据
-  raw/events.jsonl          线上对局实时采集流水
+## 核心参数（StrategyParams）
 
-tests/                      全套自动化单元测试（16 项覆盖 100% 通过）
+| 参数 | 说明 |
+| :--- | :--- |
+| `vpip` | 入池率，控制起手牌范围 |
+| `open_frequency` | 开局加注频率 |
+| `threebet_frequency` | 3-bet 频率 |
+| `cbet_frequency` | 持续下注频率 |
+| `value_threshold` | 价值下注胜率门槛 |
+| `safety` / `attack` | 锦标赛保守/激进平衡 |
+| `bubble_aggression` | 气泡期激进度 |
+| `temperature` | 决策随机性 |
+
+## 训练方法
+
+进化策略（ES）：每代对 `population` 个候选进行锦标赛评估，取 top-k elite 做交叉变异，生成下一代种群。评估使用 **Common Random Numbers**（所有候选共享同一对手池和随机种子），消除候选间抽签运气。每代结束后对 top-k 进行留出集重评，取平均参数候选与最佳原始 elite 中表现更好的作为该代冠军。
+
+## 测试
+
+```bash
+uv run python -m pytest tests -q
 ```

@@ -1,0 +1,42 @@
+{
+  "generation": 13,
+  "champion": {
+    "vpip": 0.046473945531408434,
+    "open_frequency": 0.7319057696252758,
+    "threebet_frequency": 0.06253907766802475,
+    "squeeze_frequency": 0.0416245808300228,
+    "steal_frequency": 0.6527417621906293,
+    "cbet_frequency": 0.48801003024764883,
+    "turn_barrel_frequency": 0.5988036299317313,
+    "river_bluff_frequency": 0.01,
+    "value_threshold": 0.7523863438506936,
+    "thin_value_threshold": 0.6552217684850795,
+    "raise_threshold": 0.5930012869431557,
+    "jam_threshold": 0.8863639919703578,
+    "open_size": 2.335775508820584,
+    "cbet_size": 0.01,
+    "value_bet_size": 0.5647146778302417,
+    "bluff_bet_size": 0.4915474343008578,
+    "raise_size": 0.5423125773450616,
+    "safety": 0.915905730802127,
+    "attack": 0.2693099028914574,
+    "bubble_aggression": 0.3216767240723498,
+    "late_aggression": 0.16086374827739838,
+    "temperature": 0.23601582721762426,
+    "equity_samples": 0
+  },
+  "metrics": {
+    "top12_rate": 0.5,
+    "final_rate": 0.35,
+    "champion_rate": 0.1,
+    "avg_rank": 14.45,
+    "avg_bb100": 50.747749999999996,
+    "fitness": 0.4127857142857143,
+    "fitness_se": 0.08801042957675934,
+    "fitness_ci95": [
+      0.24028527231526603,
+      0.5852861562561626
+    ],
+    "runs": 20
+  }
+}

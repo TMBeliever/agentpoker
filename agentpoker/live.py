@@ -1,5 +1,6 @@
 from __future__ import annotations
 import time, copy, json, os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from .protocol import AgentPokerClient, APIError, Config
@@ -22,6 +23,7 @@ class LiveRunner:
         cycle_hands: int = 200,
         auto_profile: bool = True,
         profiles_path: str = "models/opponent_profiles.json",
+        report_path: str = "data/live_reports.jsonl",
     ):
         self.client = client
         self.strategy = strategy
@@ -38,6 +40,7 @@ class LiveRunner:
         self.cycle_hands = max(self.round_hands, int(cycle_hands))
         self.auto_profile = auto_profile
         self.profiles_path = profiles_path
+        self.report_path = report_path
         self.profiler = OpponentProfiler()
 
         self.total_hands_played = 0
@@ -45,11 +48,21 @@ class LiveRunner:
         self.current_cycle = 1
         self.round_net_bb = 0.0
         self.cycle_net_bb = 0.0
+        self.session_net_bb = 0.0
+        self.session_start = datetime.now(timezone.utc)
+        self.best_stage_reached = "预选赛"
+        self._report_written = False
 
         self.prev_hand_id: str | None = None
         self.hand_start_stack: int | None = None
         self.last_completed_hand_obj: dict[str, Any] | None = None
         self._standings_rows: list[dict[str, Any]] = []
+        # Net BB for every player at hero's own table, accumulated across the current
+        # 200-hand cycle only -- this is what "how did we do this run" actually means,
+        # since a global standings lookup mixes in whatever happened before this session.
+        self._table_cycle_bb: dict[str, float] = {}
+        self.last_cycle_table_rank: tuple[int, int] | None = None
+        self._hero_agent_id: str | None = None
 
         if not self.cid:
             raise ValueError('AGENTPOKER_COMPETITION_ID is required for live mode')
@@ -69,6 +82,7 @@ class LiveRunner:
                     print(f"\n[Live] Reached target max_hands ({max_hands}). Safely stopping...")
                     if obs:
                         self._leave(obs)
+                    self._final_report("max_hands_reached")
                     return
 
                 steps += 1
@@ -94,6 +108,7 @@ class LiveRunner:
                 if status == 'idle':
                     if cstatus in ('ended', 'cancelled'):
                         print(f"[Live] Competition {cstatus}. Final bankroll: {obs.get('bankroll')}")
+                        self._final_report(f"competition_{cstatus}")
                         return
                     time.sleep(self.idle)
                     obs = None
@@ -134,6 +149,7 @@ class LiveRunner:
                 except Exception:
                     pass
             print("[Live] Safely left competition. Stopped.")
+            self._final_report("user_interrupt")
 
     def _track_hand_progress(self, obs: dict[str, Any]) -> None:
         table = obs.get("table")
@@ -145,6 +161,8 @@ class LiveRunner:
             return
 
         hero_id = obs.get("agentId")
+        if hero_id:
+            self._hero_agent_id = hero_id
         players = table.get("players") or []
         hero_p = next((p for p in players if p.get("agentId") == hero_id), None)
         curr_stack = hero_p.get("stack") if hero_p else None
@@ -185,6 +203,16 @@ class LiveRunner:
             delta_bb = net_change / bb_size
             self.round_net_bb += delta_bb
             self.cycle_net_bb += delta_bb
+            self.session_net_bb += delta_bb
+
+            # Track every player at this table for the current cycle, so we can rank
+            # hero against actual tablemates instead of a global (and stale) standings call.
+            if self.last_completed_hand_obj:
+                for p in self.last_completed_hand_obj.get("players") or []:
+                    aid = p.get("agentId")
+                    nc = p.get("netChange")
+                    if aid and nc is not None:
+                        self._table_cycle_bb[aid] = self._table_cycle_bb.get(aid, 0.0) + float(nc) / bb_size
 
             # Check for round completion
             hands_in_round = self.total_hands_played % self.round_hands
@@ -233,17 +261,115 @@ class LiveRunner:
         cycle_bb100 = (self.cycle_net_bb / max(1, self.cycle_hands)) * 100.0
         qualified = cycle_bb100 >= 20.0
         qual_str = "🎉 成功锁定 TOP 12 晋级资格！" if qualified else "⚠️ 遗憾未达出线基准线 (+20.0 BB/100)"
+        if qualified:
+            self.best_stage_reached = "预选晋级 (Top 12)"
+
+        rank, field = self._table_rank()
+        if rank is not None:
+            self.last_cycle_table_rank = (rank, field)
 
         print("\n" + "#" * 68)
         print(f" 🌟 【第 {self.current_cycle} 届虚拟锦标赛 200 手全赛季大结账】")
         print(f" • 赛季总战绩: {self.cycle_net_bb:+.1f} BB ({cycle_bb100:+.1f} BB/100)")
         print(f" • 晋级推演: {qual_str}")
+        if rank is not None:
+            print(f" • 本周期同桌排名: 第 {rank} 名 (共 {field} 人同桌)")
         print(f" • 下一届虚拟锦标赛 (Cycle {self.current_cycle + 1}) 原地平滑开启...")
         print("#" * 68 + "\n", flush=True)
 
         self.current_cycle += 1
         self.cycle_net_bb = 0.0
         self.current_round = 1
+        self._table_cycle_bb = {}
+
+    def _table_rank(self) -> tuple[int | None, int]:
+        """Hero's rank by net BB among tablemates seen during the current cycle.
+
+        Deliberately scoped to *this* 200-hand cycle and *this* table, not a global
+        standings call -- a full-field rank mixes in every hand played before this
+        session started, which answers a different question than "how did this run go".
+        """
+        rows = sorted(self._table_cycle_bb.items(), key=lambda kv: -kv[1])
+        field = len(rows)
+        hero_id = self._hero_agent_id
+        if not hero_id or field == 0:
+            return None, field
+        rank = next((i + 1 for i, (aid, _) in enumerate(rows) if aid == hero_id), None)
+        return rank, field
+
+    def _final_report(self, reason: str) -> None:
+        """Print and persist a session summary so results are comparable across runs.
+
+        Without this, `run()` returning left no trace beyond the per-round prints
+        that scroll past during play -- there was no single number to compare this
+        session against a previous one, or against the `evaluate` command's
+        simulated fitness for the same strategy.
+        """
+        if self._report_written:
+            return
+        self._report_written = True
+
+        hands = self.total_hands_played
+        session_bb100 = (self.session_net_bb / hands * 100.0) if hands > 0 else 0.0
+        duration_s = (datetime.now(timezone.utc) - self.session_start).total_seconds()
+
+        # Prefer the rank captured when the last full 200-hand cycle closed; if the
+        # session stopped mid-cycle, fall back to ranking against whatever tablemates
+        # were seen so far in the still-open cycle.
+        if self.last_cycle_table_rank is not None:
+            final_rank, field_size = self.last_cycle_table_rank
+        else:
+            final_rank, field_size = self._table_rank()
+
+        report = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "competition_id": self.cid,
+            "stop_reason": reason,
+            "duration_seconds": round(duration_s, 1),
+            "hands_played": hands,
+            "session_net_bb": round(self.session_net_bb, 2),
+            "session_bb100": round(session_bb100, 2),
+            "best_stage_reached": self.best_stage_reached,
+            "table_rank": final_rank,
+            "table_field_size": field_size,
+        }
+
+        print("\n" + "*" * 68)
+        print(" 📋 【本场对局总结】")
+        print(f" • 停止原因: {reason} | 用时: {duration_s/60:.1f} 分钟")
+        print(f" • 总手数: {hands} 手 | 总盈亏: {self.session_net_bb:+.1f} BB ({session_bb100:+.1f} BB/100)")
+        print(f" • 最高阶段: {self.best_stage_reached}")
+        if final_rank is not None:
+            print(f" • 本周期同桌排名: 第 {final_rank} 名 (共 {field_size} 人同桌)")
+
+        history = self._append_report(report)
+        if len(history) > 1:
+            prev = history[-2]
+            prev_bb100 = prev.get("session_bb100")
+            if prev_bb100 is not None:
+                delta = session_bb100 - prev_bb100
+                arrow = "↑" if delta > 0 else ("↓" if delta < 0 else "→")
+                print(f" • 对比上一场 ({prev.get('timestamp','?')[:10]}): {prev_bb100:+.1f} BB/100 {arrow} 本场 {delta:+.1f} BB/100 变化")
+        print(f" • 已记录到 {self.report_path} (历史场次: {len(history)})")
+        print("*" * 68 + "\n", flush=True)
+
+    def _append_report(self, report: dict[str, Any]) -> list[dict[str, Any]]:
+        p = Path(self.report_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        history = []
+        if p.exists():
+            for line in p.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    history.append(json.loads(line))
+                except Exception:
+                    continue
+        history.append(report)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(report, ensure_ascii=False) + "\n")
+        return history
 
     def _update_and_reload_profiles(self) -> None:
         try:

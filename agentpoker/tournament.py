@@ -94,7 +94,13 @@ class LeagueSimulator:
                 for aid in grp:
                     if local[aid]['stack']<=0: local[aid]['stack']=100*self.big_blind
                 before={aid:local[aid]['stack'] for aid in grp}
-                res,dealer=self.engine.play_hand(grp,{aid:local[aid]['stack'] for aid in grp},dealer,policies,context_provider=lambda aid:{'rank':None,'bb100':None,'hands_remaining':20-h,'round_no':11})
+                _h_sf=h; _local_sf=local
+                def _sf_ctx(aid, _local=_local_sf, _h=_h_sf):
+                    rows=sorted(_local.items(), key=lambda x: -(x[1]['net_bb']/max(1,x[1]['hands'])*100 if x[1]['hands']>0 else float('-inf')))
+                    rank=next((i+1 for i,(a,_) in enumerate(rows) if a==aid), None)
+                    b=(_local[aid]['net_bb']/_local[aid]['hands']*100) if _local[aid]['hands']>0 else None
+                    return {'rank':rank,'bb100':b,'hands_remaining':20-_h,'round_no':11}
+                res,dealer=self.engine.play_hand(grp,{aid:local[aid]['stack'] for aid in grp},dealer,policies,context_provider=_sf_ctx)
                 for aid in grp:
                     local[aid]['stack']=res.final_stacks[aid]; local[aid]['hands']+=1; local[aid]['net_bb']+=(local[aid]['stack']-before[aid])/self.big_blind
                     if local[aid]['stack']<=0: local[aid]['stack']=100*self.big_blind
@@ -107,7 +113,13 @@ class LeagueSimulator:
         ids=[s.agent_id for s in finals]; self.rng.shuffle(ids); local={aid:{'net_bb':0.0,'hands':0,'stack':100*self.big_blind} for aid in ids}; dealer=0; policies={a.agent_id:a.strategy for a in self.agents}
         for h in range(30):
             before={aid:local[aid]['stack'] for aid in ids}
-            res,dealer=self.engine.play_hand(ids,{aid:local[aid]['stack'] for aid in ids},dealer,policies,context_provider=lambda aid:{'rank':None,'bb100':None,'hands_remaining':30-h,'round_no':12})
+            _h_f=h; _local_f=local
+            def _f_ctx(aid, _local=_local_f, _h=_h_f):
+                rows=sorted(_local.items(), key=lambda x: -(x[1]['net_bb']/max(1,x[1]['hands'])*100 if x[1]['hands']>0 else float('-inf')))
+                rank=next((i+1 for i,(a,_) in enumerate(rows) if a==aid), None)
+                b=(_local[aid]['net_bb']/_local[aid]['hands']*100) if _local[aid]['hands']>0 else None
+                return {'rank':rank,'bb100':b,'hands_remaining':30-_h,'round_no':12}
+            res,dealer=self.engine.play_hand(ids,{aid:local[aid]['stack'] for aid in ids},dealer,policies,context_provider=_f_ctx)
             for aid in ids:
                 local[aid]['stack']=res.final_stacks[aid]; local[aid]['hands']+=1; local[aid]['net_bb']+=(local[aid]['stack']-before[aid])/self.big_blind
                 if local[aid]['stack']<=0: local[aid]['stack']=100*self.big_blind
