@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-import json, re
+import json, re, time
 from typing import Any
 
 class OpponentProfiler:
@@ -277,7 +277,15 @@ class OpponentProfiler:
                         break
                     limit = min(50, remaining)
 
-                resp = client.hands(cid, limit=limit, cursor=cursor)
+                resp = None
+                for attempt in range(4):
+                    try:
+                        resp = client.hands(cid, limit=limit, cursor=cursor)
+                        break
+                    except Exception as e:
+                        if attempt == 3:
+                            raise
+                        time.sleep(1.0 * (attempt + 1))
                 hands = resp.get("hands") or []
                 if not hands:
                     break
