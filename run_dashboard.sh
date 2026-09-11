@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${PORT:-8080}"
+PORT="${PORT:-9003}"
 HOST="${HOST:-0.0.0.0}"
 
 echo "========================================================"

@@ -1,34 +1,46 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
+
+PORT="9003"
 
 echo "=========================================================="
 echo " 🃏 AgentPoker 2.0 Docker 一键部署"
+echo " 映射端口: ${PORT}"
 echo "=========================================================="
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "❌ 检测到未安装 Docker。正在为您准备官方一键安装命令..."
-    echo "请在 Ubuntu 上执行: curl -fsSL https://get.docker.com | sh"
+mkdir -p models data logs
+if [ ! -f .env ]; then
+    touch .env
+fi
+
+DOCKER_CMD="docker"
+if ! docker info >/dev/null 2>&1; then
+    if sudo docker info >/dev/null 2>&1; then
+        echo "💡 已自动启用 sudo 权限执行..."
+        DOCKER_CMD="sudo docker"
+    else
+        echo "❌ 错误: Docker 服务未运行"
+        exit 1
+    fi
+fi
+
+if $DOCKER_CMD compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="$DOCKER_CMD compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+elif command -v sudo >/dev/null 2>&1 && sudo docker-compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="sudo docker-compose"
+else
+    echo "❌ 错误: 未检测到 docker compose"
     exit 1
 fi
 
-mkdir -p models data logs
-
-if [ ! -f .env ]; then
-    echo "⚠️ 未发现 .env 文件，已自动生成基础模板..."
-    cat << 'ENVEOF' > .env
-AGENTPOKER_APP=https://poker.bang.sohu.com
-AGENTPOKER_KEY=
-AGENTPOKER_COMPETITION_ID=
-ENVEOF
-    echo "💡 如需实战对战，请在 .env 中填入你的 KEY 和 COMPETITION_ID"
-fi
-
-echo "🚀 正在构建并启动 AgentPoker 容器..."
-docker compose up -d --build
+echo "🚀 正在启动容器..."
+${COMPOSE_CMD} up -d --build
 
 echo "=========================================================="
 echo " ✅ 容器已成功在后台启动！"
-echo " • 访问控制台: http://<你的服务器公网IP>:8080"
-echo " • 查看运行日志: docker compose logs -f"
-echo " • 停止容器:     docker compose down"
+echo " • 访问控制台: http://<你的服务器公网IP>:${PORT}"
+echo " • 查看实时日志: ${COMPOSE_CMD} logs -f"
+echo " • 停止容器:     ${COMPOSE_CMD} down"
 echo "=========================================================="

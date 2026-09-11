@@ -6,11 +6,10 @@ services:
     container_name: agentpoker
     restart: unless-stopped
     ports:
-      - "8080:8080"
-    shm_size: '256mb'
+      - "9003:8080"
+    shm_size: 256m
     env_file:
-      - path: .env
-        required: false
+      - .env
     volumes:
       - ./models:/app/models
       - ./data:/app/data
