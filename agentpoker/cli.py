@@ -92,47 +92,61 @@ def run_connect(base_url: str = "https://poker.bang.sohu.com") -> None:
 
 def main():
     p=argparse.ArgumentParser(prog='agentpoker'); sub=p.add_subparsers(dest='cmd',required=True)
-    s=sub.add_parser('simulate'); s.add_argument('--agents',type=int,default=36); s.add_argument('--runs',type=int,default=10); s.add_argument('--seed',type=int,default=7)
-    t=sub.add_parser('train')
-    t.add_argument('--track',choices=['universal','targeted'],default=None,help='Training track: universal (general robust GTO) or targeted (real opponent profiling)')
-    t.add_argument('--generations',type=int,default=10)
-    t.add_argument('--population',type=int,default=16)
-    t.add_argument('--runs',type=int,default=30)
-    t.add_argument('--final-race',type=int,default=200)
-    t.add_argument('--agents',type=int,default=36)
-    t.add_argument('--equity-samples',type=int,default=0)
-    t.add_argument('--workers',type=int,default=0)
-    t.add_argument('--profiles',default=None,help='Opponent profiles for targeted training')
-    t.add_argument('--save',default=None,help='Output model path')
-    t.add_argument('--archive',default=None,help='Generations archive directory')
-    t.add_argument('--no-resume',dest='resume',action='store_false',default=True,help='Disable resuming from existing archive checkpoints')
-    t.add_argument('--reeval-runs',type=int,default=40,help='Fresh-seed tournaments used to re-score the generation shortlist before crowning a champion')
-    t.add_argument('--holdout-frac',type=float,default=0.25,help='Fraction of real opponent profiles held out of training and used only for final validation')
-    e=sub.add_parser('evaluate'); e.add_argument('--strategy',default='models/champion.json'); e.add_argument('--runs',type=int,default=500); e.add_argument('--agents',type=int,default=36); e.add_argument('--equity-samples',type=int,default=0); e.add_argument('--profiles',default=None); e.add_argument('--workers',type=int,default=0)
-    l=sub.add_parser('live')
-    l.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'))
-    l.add_argument('--key',default=os.getenv('AGENTPOKER_KEY'))
-    l.add_argument('--app',default=os.getenv('AGENTPOKER_APP','https://poker.bang.sohu.com'))
-    l.add_argument('--strategy',default='models/champion.json')
-    l.add_argument('--max-steps',type=int,default=0)
-    l.add_argument('--max-hands',type=int,default=0,help='Max hands to play before stopping (0 for infinite)')
-    l.add_argument('--round-hands',type=int,default=20,help='Number of hands per round (default: 20)')
-    l.add_argument('--cycle-hands',type=int,default=200,help='Number of hands per tournament cycle (default: 200)')
-    l.add_argument('--no-auto-profile',dest='auto_profile',action='store_false',default=True,help='Disable automatic in-memory profile hot-reloading')
-    l.add_argument('--profiles',default='models/opponent_profiles.json')
-    r=sub.add_parser('replay-export'); r.add_argument('--raw',default='data/raw/events.jsonl'); r.add_argument('--out',default='data/processed/hands.jsonl')
-    sub.add_parser('discover')
-    conn=sub.add_parser('connect')
-    conn.add_argument('--app',default=os.getenv('AGENTPOKER_APP','https://poker.bang.sohu.com'))
-    pr=sub.add_parser('profile')
-    pr.add_argument('--input',default='data/processed/hands.jsonl')
-    pr.add_argument('--out',default='models/opponent_profiles.json')
-    pr.add_argument('--prior-weight',type=float,default=8.0)
-    pr.add_argument('--min-hands',type=int,default=30,help='Minimum hands required to keep in profile')
-    pr.add_argument('--no-filter-afk',dest='filter_afk',action='store_false',default=True,help='Disable filtering AFK/zombie agents')
-    pr.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'))
-    pr.add_argument('--pull',action='store_true',help='Pull hands directly from competition API')
-    pr.add_argument('--max-hands',type=int,default=None)
+    s=sub.add_parser('simulate',help='快速模拟：让 N 个原型 bot 打一场锦标赛看结果分布（不训练）')
+    s.add_argument('--agents',type=int,default=36,help='参赛人数（默认 36）')
+    s.add_argument('--runs',type=int,default=10,help='模拟场数（默认 10）')
+    s.add_argument('--seed',type=int,default=7,help='随机种子，同种子结果可复现')
+    t=sub.add_parser('train',help='进化训练：逐代演化策略参数，产出冠军模型')
+    t.add_argument('--track',choices=['universal','targeted'],default=None,help='训练轨：universal=通用原型池（泛化好）；targeted=真实画像特训（贴合当前赛场）。不指定时：有 --profiles 走 targeted，否则 universal')
+    t.add_argument('--generations',type=int,default=10,help='训练代数。每代耗时取决于 --runs 和 --agents（8核16候选：36人×120场约9分钟，96人×120场约15分钟）')
+    t.add_argument('--population',type=int,default=16,help='每代候选策略数量，越大探索越广，但每代耗时线性增加')
+    t.add_argument('--runs',type=int,default=30,help='每个候选评估的锦标赛场数。这是噪声的主要来源：30 场时标准误约 ±0.07，建议正式训练用 >=120')
+    t.add_argument('--final-race',type=int,default=200,help='最终在留出集上验证冠军的场数，决定最后报告的 fitness 有多可信')
+    t.add_argument('--agents',type=int,default=36,help='每场锦标赛参赛人数，建议对齐真实赛场规模（如真实 100 人就设 96）')
+    t.add_argument('--equity-samples',type=int,default=0,help='胜率蒙特卡洛采样数：0=用离线标定表查表（快，训练推荐）；>0=实时精确采样（更准但慢很多）')
+    t.add_argument('--workers',type=int,default=0,help='并发进程数，0=自动（最多 8 核）')
+    t.add_argument('--profiles',default=None,help='对手画像文件路径。targeted 轨默认 models/opponent_profiles.json')
+    t.add_argument('--mix-profiles',dest='mix_profiles',action='store_true',help='通用训练中混入优质真实画像（与原型共同组成对手池）。不加则保持纯原型训练')
+    t.add_argument('--profile-min-hands',type=int,default=100,help='画像质量门槛：手数低于此值不采用，用于剔除小样本噪声画像（默认 100 手）')
+    t.add_argument('--profile-share',type=float,default=0.5,help='画像在对手池中最多占的座位比例，其余留给原型+种群+名人堂（默认 0.5，即画像最多占一半）')
+    t.add_argument('--save',default=None,help='冠军模型输出路径')
+    t.add_argument('--archive',default=None,help='各代存档目录，用于断点续训')
+    t.add_argument('--no-resume',dest='resume',action='store_false',default=True,help='关闭续训：忽略已有存档、从第 1 代重训（默认会自动从存档继续）')
+    t.add_argument('--reeval-runs',type=int,default=40,help='每代初选后用全新对手池复评的场数，用于消除「冠军只是抽样运气」的偏差')
+    t.add_argument('--holdout-frac',type=float,default=0.25,help='留出集比例：这部分真实画像不参与训练，只用于最终验证泛化能力（默认 25%%）')
+    e=sub.add_parser('evaluate',help='离线评估：让指定模型跟真实画像打 N 场锦标赛，看泛化表现（不上真实赛场）')
+    e.add_argument('--strategy',default='models/champion.json',help='要评估的模型文件路径')
+    e.add_argument('--runs',type=int,default=500,help='评估场数。场数越多置信区间越窄，500 场时标准误约 ±0.016')
+    e.add_argument('--agents',type=int,default=36,help='对手池人数，建议对齐真实赛场规模')
+    e.add_argument('--equity-samples',type=int,default=0,help='胜率采样数：0=查表（快）；>0=实时精确采样（准但慢）')
+    e.add_argument('--profiles',default=None,help='对手画像文件，指定后对手来自真实选手而非原型')
+    e.add_argument('--workers',type=int,default=0,help='并发进程数，0=自动')
+    l=sub.add_parser('live',help='实战：接入真实赛场自动对局')
+    l.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'),help='赛事 ID，默认读 .env')
+    l.add_argument('--key',default=os.getenv('AGENTPOKER_KEY'),help='API 密钥，默认读 .env')
+    l.add_argument('--app',default=os.getenv('AGENTPOKER_APP','https://poker.bang.sohu.com'),help='服务器地址')
+    l.add_argument('--strategy',default='models/champion.json',help='使用的模型文件路径')
+    l.add_argument('--max-steps',type=int,default=0,help='最多循环多少步后退出，0=不限')
+    l.add_argument('--max-hands',type=int,default=0,help='打满多少手后自动停止，0=不限（想跑一个 200 手周期就设 200）')
+    l.add_argument('--round-hands',type=int,default=20,help='每轮手数，用于轮次结算提示（默认 20）')
+    l.add_argument('--cycle-hands',type=int,default=200,help='每个锦标赛周期手数，用于赛季结算与压力信号（默认 200）')
+    l.add_argument('--no-auto-profile',dest='auto_profile',action='store_false',default=True,help='关闭画像热更新（默认每 20 手自动把刚打完的对手写进画像库）')
+    l.add_argument('--profiles',default='models/opponent_profiles.json',help='画像文件路径，实战时用于识别对手类型')
+    r=sub.add_parser('replay-export',help='把实录事件流转换成手牌记录（供 profile 使用）')
+    r.add_argument('--raw',default='data/raw/events.jsonl',help='原始事件文件（live 运行时自动写入）')
+    r.add_argument('--out',default='data/processed/hands.jsonl',help='输出的手牌文件路径')
+    sub.add_parser('discover',help='查询当前有哪些进行中的赛事')
+    conn=sub.add_parser('connect',help='浏览器授权登录，把密钥写入 .env')
+    conn.add_argument('--app',default=os.getenv('AGENTPOKER_APP','https://poker.bang.sohu.com'),help='服务器地址')
+    pr=sub.add_parser('profile',help='拉取/清洗战绩，生成对手画像')
+    pr.add_argument('--input',default='data/processed/hands.jsonl',help='手牌输入文件（本地已有数据时用）')
+    pr.add_argument('--out',default='models/opponent_profiles.json',help='画像输出路径（会覆盖同路径旧文件）')
+    pr.add_argument('--prior-weight',type=float,default=8.0,help='贝叶斯先验权重：值越大，小样本选手越向「均衡型」收缩，避免几手牌就被误判成狂徒')
+    pr.add_argument('--min-hands',type=int,default=30,help='最低手数门槛：不足此手数的选手不写进画像（默认 30）')
+    pr.add_argument('--no-filter-afk',dest='filter_afk',action='store_false',default=True,help='关闭挂机过滤（默认会剔除从不入池的僵尸号）')
+    pr.add_argument('--competition-id',default=os.getenv('AGENTPOKER_COMPETITION_ID'),help='赛事 ID，默认读 .env')
+    pr.add_argument('--pull',action='store_true',help='不从本地文件读，而是直接从赛事 API 拉取最新战绩')
+    pr.add_argument('--max-hands',type=int,default=None,help='最多拉取多少手牌，不设则全量拉取')
     args=p.parse_args()
     if args.cmd=='simulate':
         names=list(ARCHETYPES); agents=[]
@@ -142,8 +156,11 @@ def main():
         for run in range(args.runs):
             sim=LeagueSimulator(agents,seed=args.seed+run*10007); r=sim.run_event(); print(f'run={run+1} top12={[x.agent_id for x in r["qualified"][:12]]} champion={r["final"][0].agent_id if r["final"] else None}')
     elif args.cmd=='train':
-        track = args.track
-        if track is None:
+        if args.track is not None:
+            track = args.track
+        elif args.mix_profiles:
+            track = 'universal'
+        else:
             track = 'targeted' if args.profiles else 'universal'
 
         if track == 'targeted':
@@ -155,11 +172,20 @@ def main():
         else:
             save_path = args.save or 'models/champion_universal.json'
             archive_dir = args.archive or 'models/archive_universal'
-            profiles_src = None
+            profiles_src = (args.profiles or 'models/opponent_profiles.json') if args.mix_profiles else None
             print(f"[Train] === 启动【通用自演化基石轨 (Universal)】===")
-            print(f"[Train] 无特定画像偏见 | 模型保存: {save_path} | 归档: {archive_dir}")
+            if profiles_src:
+                print(f"[Train] 混练模式: 原型池 + 优质画像 (门槛>={args.profile_min_hands}手, 占比<={args.profile_share:.0%}) | 画像源: {profiles_src}")
+            else:
+                print(f"[Train] 纯原型模式 (未启用 --mix-profiles，无真实画像偏见)")
+            print(f"[Train] 模型保存: {save_path} | 归档: {archive_dir}")
 
-        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src, holdout_frac=args.holdout_frac)
+        trainer = StrategyTrainer(seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers, profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands, profile_share=args.profile_share)
+        if profiles_src:
+            n_prof = trainer.n_profiles_loaded
+            print(f"[Train] 画像质量筛选: {n_prof} 位通过门槛 (>={args.profile_min_hands} 手)")
+            if n_prof and n_prof < 10:
+                print(f"[Train] 警告: 通过门槛的画像仅 {n_prof} 位，对手池多样性偏低，建议下调 --profile-min-hands")
         champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume, reeval_runs=args.reeval_runs)
         
         if track == 'universal' and save_path == 'models/champion_universal.json':

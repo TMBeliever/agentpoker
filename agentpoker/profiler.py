@@ -34,6 +34,67 @@ class OpponentProfiler:
             "raise_frac_samples": [],
         }
 
+    def seed_from_profiles(self, profiles: dict[str, Any]) -> int:
+        """Load a previously exported profile file back into raw counts.
+
+        Call this once, before ingesting anything. A live session's profiler starts
+        empty, so without seeding its export holds only this session's hands -- and
+        writing that over the stored file replaces, say, a 2000-hand profile with a
+        20-hand sample. Seeding makes ingestion accumulate on top of stored history
+        instead, so `export` re-derives every rate and archetype from the combined
+        counts and the Bayesian prior weights the larger sample correctly.
+        """
+        seeded = 0
+        for aid, p in (profiles or {}).items():
+            if not isinstance(p, dict):
+                continue
+            st = self.stats.setdefault(aid, self._new_stats())
+            st["hands"] += int(p.get("hands", 0) or 0)
+            st["vpip"] += int(p.get("vpip_count", 0) or 0)
+            st["pfr"] += int(p.get("pfr_count", 0) or 0)
+            st["raises"] += int(p.get("raises_count", 0) or 0)
+            st["bets"] += int(p.get("bets_count", 0) or 0)
+            st["calls"] += int(p.get("calls_count", 0) or 0)
+            st["folds"] += int(p.get("folds_count", 0) or 0)
+            st["checks"] += int(p.get("checks_count", 0) or 0)
+            st["allins"] += int(p.get("allins_count", 0) or 0)
+            st["wtsd"] += int(p.get("wtsd_count", 0) or 0)
+            net_pnl = int(p.get("net_pnl", 0) or 0)
+            st["net_pnl"] += net_pnl
+
+            bb_sum = float(p.get("bb_sum", 0.0) or 0.0)
+            if bb_sum <= 0.0 and net_pnl and p.get("bb_100"):
+                # Files written before bb_sum was exported: reconstruct it from the
+                # rounded bb_100 so the seed still reproduces the stored win rate.
+                ratio = float(p["bb_100"]) / 100.0
+                if ratio:
+                    bb_sum = net_pnl / ratio
+            st["bb_sum"] += bb_sum
+
+            # Sizing was historically stored as an average plus one combined count.
+            # Repeating the average that many times reproduces it exactly and lets new
+            # samples blend in at the right weight; the count is split evenly across
+            # the four sizing types when the per-type counts are absent.
+            total_n = int(p.get("sizing_samples", 0) or 0)
+            for sample_key, avg_key, count_key in (
+                ("open_bb_samples", "open_size_bb", "open_size_n"),
+                ("cbet_frac_samples", "cbet_size", "cbet_n"),
+                ("bet_frac_samples", "value_bet_size", "bet_n"),
+                ("raise_frac_samples", "raise_size", "raise_n"),
+            ):
+                avg = p.get(avg_key)
+                if avg is None:
+                    continue
+                n = int(p.get(count_key, 0) or 0) or total_n // 4
+                if n > 0:
+                    st[sample_key].extend([float(avg)] * n)
+
+            name = p.get("name")
+            if name and name != "Unknown":
+                self.names[aid] = name
+            seeded += 1
+        return seeded
+
     def ingest_hand(self, data: dict[str, Any]) -> None:
         """Ingest a single hand observation, raw event, or API hand dictionary."""
         if isinstance(data, dict) and "actions" in data and "players" in data:
@@ -338,6 +399,15 @@ class OpponentProfiler:
                 "wtsd_count": st["wtsd"],
                 "net_pnl": net_pnl,
                 "bb_100": bb_100,
+                # Raw accumulators, kept so a later run can seed from this file and keep
+                # adding to these counts rather than restarting from zero. bb_sum is the
+                # denominator behind bb_100 and per-type counts are the weights behind
+                # each sizing average; without them a seed cannot reproduce either.
+                "bb_sum": round(st.get("bb_sum", 0.0), 2),
+                "open_size_n": len(st.get("open_bb_samples") or []),
+                "cbet_n": len(st.get("cbet_frac_samples") or []),
+                "bet_n": len(st.get("bet_frac_samples") or []),
+                "raise_n": len(st.get("raise_frac_samples") or []),
                 "vpip": round(svpip, 3),
                 "pfr": round(spfr, 3),
                 "raise": round(sraise, 3),

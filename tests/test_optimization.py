@@ -176,6 +176,42 @@ def test_opponent_profiler_quality_filters():
     assert "noisy_newbie" not in cleaned
     assert "zombie_bot" not in cleaned
 
+def test_live_profile_hot_reload_accumulates_onto_stored_counts(tmp_path):
+    """A live session must add to stored history, not replace it with its own sample.
+
+    The profiler seeds from the profile file at startup, so 5 hands on top of a
+    2000-hand profile yields 2005. Without seeding the session snapshot (5 hands)
+    would be written over the file -- losing the history, and dropping the opponent
+    from the model entirely since load_opponent_profiles ignores anything under 15 hands.
+    """
+    from agentpoker.live import LiveRunner
+    from agentpoker.protocol import AgentPokerClient, Config
+
+    profiles_file = tmp_path / "opponent_profiles.json"
+    profiles_file.write_text(json.dumps({
+        "veteran": {
+            "name": "Vet", "hands": 2000, "vpip_count": 600, "raises_count": 400,
+            "calls_count": 200, "folds_count": 1200, "net_pnl": 5000, "bb_sum": 10000.0,
+            "bb_100": 50.0, "vpip": 0.3,
+        },
+    }), encoding="utf-8")
+
+    client = AgentPokerClient(Config(key="fake", competition_id="comp1"))
+    runner = LiveRunner(client, StrategyAgent(name="hero"), competition_id="comp1",
+                        profiles_path=str(profiles_file))
+    for _ in range(5):
+        runner.profiler.ingest_hand({
+            "players": [{"agentId": "veteran", "name": "Vet"}],
+            "actions": [{"agentId": "veteran", "type": "raise", "street": "preflop"}],
+        })
+    runner._update_and_reload_profiles()
+
+    stored = json.loads(profiles_file.read_text(encoding="utf-8"))
+    assert stored["veteran"]["hands"] == 2005, "session hands must accumulate onto stored counts"
+    assert stored["veteran"]["vpip_count"] == 605, "action counts must accumulate too"
+    assert stored["veteran"]["name"] == "Vet", "the stored name must survive the rewrite"
+
+
 def test_short_stack_min_raise_boundary():
     agent = StrategyAgent(seed=42)
     # Scenario: hero is short-stacked (500 chips remaining), table has min bet = 1000

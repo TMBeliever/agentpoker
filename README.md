@@ -32,7 +32,11 @@ SAVE=models/champion_new.json \
 # 正式版（约 5-6 小时，30 代）
 SAVE=models/champion_new.json ./run_train.sh --no-resume
 
-# 针对真实对手画像的定向训练
+# 通用训练 + 混入优质真实画像（推荐：既有原型覆盖，又见到真实对手）
+MIX_PROFILES=1 PROFILE_MIN_HANDS=300 PROFILE_SHARE=0.5 \
+SAVE=models/champion.json ./run_train.sh --no-resume
+
+# 针对真实对手画像的定向训练（画像占满对手池）
 SAVE=models/champion_targeted.json uv run python -m agentpoker.cli train \
   --track targeted --profiles models/opponent_profiles.json
 
@@ -40,7 +44,81 @@ SAVE=models/champion_targeted.json uv run python -m agentpoker.cli train \
 ./run_train.sh
 ```
 
+### 混练开关
+
+默认的 Universal 训练只用 6 个合成原型。加 `--mix-profiles` 可以在保留原型的同时混入真实对手画像：
+
+| 参数 | 默认 | 说明 |
+| :--- | :---: | :--- |
+| `--mix-profiles` | 关 | 通用训练中混入真实画像 |
+| `--profile-min-hands` | 100 | 画像质量门槛，低于此手数不采用（剔除噪声大的画像） |
+| `--profile-share` | 0.5 | 画像在对手池中占的座位比例上限，其余留给原型+种群+名人堂 |
+
+为什么限制 `profile_share`：真实画像的风格分布偏斜（TAG/LAG/Maniac 占 50/60），纯画像训练会欠训练紧弱/被动风格；原型负责补上这些缺失的极端风格。
+
 训练过程实时输出每个候选的 fitness，每代结束输出汇总。
+
+### 训练参数速查
+
+`./run_train.sh` 用环境变量控制（写法 `VAR=值 ./run_train.sh`），底层是 `agentpoker train`。额外的命令行参数会原样透传，例如 `./run_train.sh --no-resume --archive models/my_archive`。
+
+| 环境变量 | CLI 参数 | 默认 | 说明 |
+| :--- | :--- | :---: | :--- |
+| `GENERATIONS` | `--generations` | 30 | 训练代数。每代耗时取决于 `RUNS_PER_CANDIDATE` 和 `AGENTS` |
+| `POPULATION` | `--population` | 16 | 每代候选策略数，越大探索越广、每代越慢 |
+| `RUNS_PER_CANDIDATE` | `--runs` | 120 | **每个候选评估的场数，噪声的主要来源**。30 场时标准误 ±0.07，120 场约 ±0.035 |
+| `REEVAL_RUNS` | `--reeval-runs` | 60 | 每代初选后用全新对手池复评的场数，消除「冠军只是抽样运气」 |
+| `FINAL_RACE` | `--final-race` | 500 | 最终留出集验证场数，决定报告数字的可信度 |
+| `AGENTS` | `--agents` | 36 | 每场锦标赛参赛人数，建议对齐真实赛场规模 |
+| `WORKERS` | `--workers` | CPU 核数 | 并发进程数 |
+| `SAVE` | `--save` | models/champion.json | 冠军模型输出路径 |
+| — | `--archive` | models/archive_universal | 各代存档目录，用于断点续训 |
+| — | `--no-resume` | 关 | 忽略已有存档、从第 1 代重训（默认会自动续训） |
+| — | `--track` | 自动 | `universal`=原型池泛化 / `targeted`=真实画像特训 |
+| — | `--equity-samples` | 0 | 0=离线查表（快）；>0=实时蒙特卡洛采样（准但慢很多） |
+| — | `--holdout-frac` | 0.25 | 留出集比例，这部分画像不参与训练、只用于最终验证 |
+| `MIX_PROFILES` | `--mix-profiles` | 关 | 通用训练中混入优质真实画像 |
+| `PROFILE_MIN_HANDS` | `--profile-min-hands` | 100 | 画像质量门槛，低于此手数不采用 |
+| `PROFILE_SHARE` | `--profile-share` | 0.5 | 画像在对手池中占比上限，其余留给原型 |
+| `PROFILES` | `--profiles` | models/opponent_profiles.json | 画像文件路径 |
+
+耗时参考（8 核，16 候选/代）：36 人 × 120 场约 9 分钟/代；96 人 × 120 场约 15 分钟/代。单场锦标赛实测 36 人 2.2 秒、96 人 3.7 秒。
+
+### 评估参数
+
+| 参数 | 默认 | 说明 |
+| :--- | :---: | :--- |
+| `--strategy` | models/champion.json | 要评估的模型文件 |
+| `--runs` | 500 | 评估场数，500 场时标准误约 ±0.016 |
+| `--agents` | 36 | 对手池人数 |
+| `--profiles` | 无 | 指定后对手来自真实画像而非原型 |
+| `--workers` | 自动 | 并发进程数 |
+
+### 实战参数
+
+| 参数 | 默认 | 说明 |
+| :--- | :---: | :--- |
+| `--strategy` | models/champion.json | 使用的模型文件 |
+| `--max-hands` | 0 | 打满多少手后停止（0=不限）。想跑一个完整 200 手周期就设 `200` |
+| `--max-steps` | 0 | 最多循环多少步后退出（0=不限） |
+| `--round-hands` | 20 | 每轮手数，用于轮次结算提示 |
+| `--cycle-hands` | 200 | 每周期手数，用于赛季结算与锦标赛压力信号 |
+| `--no-auto-profile` | 关 | 关闭画像热更新（默认每 20 手自动更新一次对手画像） |
+| `--competition-id` / `--key` / `--app` | 读 `.env` | 赛事 ID / API 密钥 / 服务器地址 |
+
+### 画像参数
+
+| 参数 | 默认 | 说明 |
+| :--- | :---: | :--- |
+| `--pull` | 关 | 直接从赛事 API 拉取最新战绩（不加则读本地文件） |
+| `--input` | data/processed/hands.jsonl | 本地手牌输入文件 |
+| `--out` | models/opponent_profiles.json | 画像输出路径（会覆盖同路径旧文件） |
+| `--min-hands` | 30 | 不足此手数的选手不写入画像 |
+| `--prior-weight` | 8.0 | 贝叶斯先验权重，越大则小样本选手越向「均衡型」收缩 |
+| `--no-filter-afk` | 关 | 关闭挂机/僵尸号过滤 |
+| `--max-hands` | 不限 | 最多拉取多少手牌 |
+
+> 所有命令都支持 `--help` 查看参数说明，例如 `uv run python -m agentpoker.cli train --help`
 
 ## 评估
 

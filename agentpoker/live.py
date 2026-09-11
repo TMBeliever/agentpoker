@@ -42,6 +42,14 @@ class LiveRunner:
         self.profiles_path = profiles_path
         self.report_path = report_path
         self.profiler = OpponentProfiler()
+        # Seed from the stored profile file so this session's hands accumulate onto
+        # existing counts instead of replacing them (see seed_from_profiles).
+        try:
+            _pf = Path(profiles_path)
+            if _pf.exists():
+                self.profiler.seed_from_profiles(json.loads(_pf.read_text(encoding="utf-8")))
+        except Exception:
+            pass
 
         self.total_hands_played = 0
         self.current_round = 1
@@ -372,22 +380,16 @@ class LiveRunner:
         return history
 
     def _update_and_reload_profiles(self) -> None:
-        try:
-            new_profiles = self.profiler.build_profiles(prior_weight=8.0, min_hands=2, filter_afk=False)
-            if new_profiles:
-                p_path = Path(self.profiles_path)
-                existing = {}
-                if p_path.exists():
-                    try:
-                        existing = json.loads(p_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        pass
-                existing.update(new_profiles)
-                p_path.parent.mkdir(parents=True, exist_ok=True)
-                p_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+        """Fold the hands seen so far into the profile file and reload the strategy.
 
-                loaded = self.strategy.load_opponent_profiles(existing)
-                print(f" • [画像热更] 已实时沉淀并更新 {len(new_profiles)} 位同桌对手画像 (总画像库: {loaded})")
+        The profiler was seeded from this file at startup, so its export already holds
+        stored history *plus* this session -- writing it back merges the two rather
+        than overwriting the file with a session-only snapshot.
+        """
+        try:
+            profiles = self.profiler.export(out_path=self.profiles_path, prior_weight=8.0, min_hands=1, filter_afk=False)
+            loaded = self.strategy.load_opponent_profiles(profiles)
+            print(f" • [画像热更] 画像库已累计更新至 {len(profiles)} 位对手 (策略已加载 {loaded} 位)")
         except Exception as e:
             print(f" • [画像热更] 提示: 增量更新画像跳过 ({e})")
 

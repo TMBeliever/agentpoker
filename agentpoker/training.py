@@ -162,13 +162,14 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
     )
 
 class ArenaEvaluator:
-    def __init__(self, pool_size=36, seed=7, equity_samples=0, profiles: dict[str, Any] | str | Path | None = None, workers=0):
+    def __init__(self, pool_size=36, seed=7, equity_samples=0, profiles: dict[str, Any] | str | Path | None = None, workers=0, profile_min_hands=15):
         self.pool_size=max(12,pool_size); self.seed=seed; self.equity_samples=equity_samples; self.profiles=profiles; self.workers=workers
+        self.profile_min_hands=int(profile_min_hands)
 
     def evaluate(self, focal: StrategyParams, runs=100, opponents=None, seed_offset=0, verbose=True):
         if opponents is None:
             if self.profiles:
-                profs = self._load_profiles(self.profiles)
+                profs = self._load_profiles(self.profiles, self.profile_min_hands)
                 if profs:
                     opponents = [profile_to_params(p) for p in profs]
                     while len(opponents) < self.pool_size - 1:
@@ -220,28 +221,33 @@ class ArenaEvaluator:
             return _evaluate_worker((focal, opponents, self.seed+seed_offset, max(1,runs), self.equity_samples, verbose))
 
     @staticmethod
-    def _load_profiles(source: dict[str, Any] | str | Path) -> list[dict[str, Any]]:
+    def _load_profiles(source: dict[str, Any] | str | Path, min_hands: int = 15) -> list[dict[str, Any]]:
         if isinstance(source, (str, Path)):
             p = Path(source)
             if not p.exists(): return []
             data = json.loads(p.read_text(encoding="utf-8"))
         elif isinstance(source, dict): data = source
         else: return []
-        valid = [v for v in data.values() if isinstance(v, dict) and v.get("hands", 0) >= 15]
+        valid = [v for v in data.values() if isinstance(v, dict) and v.get("hands", 0) >= min_hands]
         valid.sort(key=lambda x: x.get("hands", 0), reverse=True)
         return valid
 
 class StrategyTrainer:
     """Full population strategy evolution: crossover + mutation + cross-play + racing."""
     FIELDS=tuple(k for k in asdict(StrategyParams()).keys() if k!="equity_samples")
-    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25):
+    HALL_SIZE=12
+    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25,
+                 profile_min_hands=15, profile_share=0.5):
         self.rng=random.Random(seed); self.seed=seed; self.pool_size=max(12,pool_size); self.equity_samples=equity_samples; self.workers=workers
         self.profiles=profiles
         self.holdout_frac=min(0.5, max(0.0, float(holdout_frac)))
+        self.profile_min_hands=int(profile_min_hands)
+        self.profile_share=min(1.0, max(0.0, float(profile_share)))
         self._cached_profile_params = []
         if self.profiles:
-            profs = ArenaEvaluator._load_profiles(self.profiles)
+            profs = ArenaEvaluator._load_profiles(self.profiles, self.profile_min_hands)
             self._cached_profile_params = [profile_to_params(p) for p in profs]
+        self.n_profiles_loaded = len(self._cached_profile_params)
         self._build_holdout()
 
     def _build_holdout(self):
@@ -298,14 +304,31 @@ class StrategyTrainer:
         return pop[:n]
 
     def _draw_pool(self, population, hall, seed, profile_pool, exclude=None):
-        candidates=list(profile_pool)
-        candidates.extend(ARCHETYPES.values()); candidates.extend(population); candidates.extend(hall)
+        """Opponent line-up for one evaluation batch.
+
+        Real profiles, when present, are capped at `profile_share` of the seats; the
+        remaining seats are filled from archetypes, the evolving population and the
+        hall of fame. Pooling every candidate together -- as this used to do -- let a
+        large profile set crowd the archetypes out entirely, which would make "mix a
+        few real opponents into universal training" indistinguishable from full
+        targeted training. Keeping a guaranteed archetype share also matters because
+        the real profile set is style-skewed (mostly loose-aggressive), so the
+        archetypes are what keep tight/passive opponents represented.
+        """
         rng=random.Random(seed)
-        out=[]
-        while len(out)<self.pool_size-1:
-            p=rng.choice(candidates)
-            if p is exclude: continue
-            out.append(replace(p))
+        rest=list(ARCHETYPES.values()); rest.extend(population); rest.extend(p for _,p in hall)
+        n=self.pool_size-1
+        n_profile=min(n, int(round(n*self.profile_share))) if profile_pool else 0
+
+        def pick(pool):
+            for _ in range(64):
+                p=rng.choice(pool)
+                if p is not exclude: return p
+            return rng.choice(pool)
+
+        out=[replace(pick(profile_pool)) for _ in range(n_profile)]
+        while len(out)<n:
+            out.append(replace(pick(rest)))
         return out
 
     def _opponents(self, focal, population, hall, seed):
@@ -341,7 +364,7 @@ class StrategyTrainer:
         return list(zip(results,pop))
 
     def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True,reeval_runs=24,
-            stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01):
+            stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01,resume_revert_margin=0.05):
         ap=Path(archive); ap.mkdir(parents=True,exist_ok=True)
         start_gen=0; history=[]; hall=[]; champion=None; champion_metrics=None
 
@@ -358,14 +381,18 @@ class StrategyTrainer:
                             "params": d["champion"],
                             "metrics": d["metrics"]
                         })
-                        hall.append(StrategyParams(**d["champion"]))
                 except Exception:
                     pass
             if history:
                 start_gen = history[-1]["generation"]
                 champion = StrategyParams(**history[-1]["params"])
                 champion_metrics = history[-1]["metrics"]
-                hall = hall[-12:]
+                # Hall of fame = the strongest champions on record, not the most recent.
+                # An archive can decay late -- here gen_016 peaked at fitness 0.51 while
+                # gen_021 fell to 0.14 -- so seeding the opponent pool from the tail
+                # would fill it with the worst strategies the run ever produced.
+                hall = [(h["metrics"]["fitness"], StrategyParams(**h["params"]))
+                        for h in sorted(history, key=lambda x: -x["metrics"]["fitness"])[:self.HALL_SIZE]]
                 print(f"[Training] 发现历史存档！从 Generation {start_gen} 自动恢复续训 (已有历史: {len(history)} 代, 当前最强 Fitness: {champion_metrics['fitness']:.4f})", flush=True)
 
         # Best-ever tracking for stagnation detection. The old schedule shrank the
@@ -387,10 +414,34 @@ class StrategyTrainer:
                     best_ever_champion = StrategyParams(**h["params"])
         stagnation_count = 0
 
+        # Resuming into the archive's *last* generation is not the same as resuming
+        # into its *best* one. A generation whose winner was picked on a lucky sample
+        # becomes the seed for everything after it, so an archive's tail can be
+        # strictly worse than its middle -- in this repo gen_016 scores 0.51 while
+        # gen_021 scores 0.14. Starting the next run from that tail means re-deriving
+        # from a known-bad point, and paying for it in generations spent climbing back.
+        #
+        # sigma_epoch exists for the same reason: the mutation step used to decay with
+        # the *absolute* generation number (0.92**g), so an archive resumed at gen 21
+        # began already at the floor and could never explore again. Decaying from the
+        # last restart instead keeps a resumed run's search budget intact.
+        sigma_epoch = start_gen
+        if champion is not None and best_ever_metrics is not None and champion_metrics is not None:
+            drop = best_ever_metrics["fitness"] - champion_metrics["fitness"]
+            if drop > resume_revert_margin:
+                best_gen = next((h["generation"] for h in history
+                                 if h["metrics"] is best_ever_metrics), None)
+                print(f"[Training] 存档末代 Gen {start_gen} (fitness={champion_metrics['fitness']:.4f}) "
+                      f"低于历史最优 Gen {best_gen} (fitness={best_ever_metrics['fitness']:.4f}) 达 {drop:.4f}，"
+                      f"改从历史最优续训并重置变异步长", flush=True)
+                champion = replace(best_ever_champion)
+                champion_metrics = best_ever_metrics
+                sigma_epoch = 0
+
         if champion is not None:
             pop = [replace(champion)]
             while len(pop) < population:
-                pop.append(self.mutate(champion, max(.02, .075 * (.92 ** start_gen))))
+                pop.append(self.mutate(champion, max(.02, .075 * (.92 ** sigma_epoch))))
         else:
             pop = self.seed_population(population)
 
@@ -403,7 +454,7 @@ class StrategyTrainer:
         re_ranked = [(champion_metrics, champion)] if champion is not None else None
 
         for g in range(start_gen, start_gen + generations):
-            base_sigma=max(.012,.075*(.92**g))
+            base_sigma=max(.012,.075*(.92**sigma_epoch))
             sigma=base_sigma
             restarted=False
             if stagnation_count >= stagnation_patience and best_ever_champion is not None:
@@ -411,7 +462,11 @@ class StrategyTrainer:
                 # continuing to refine whatever the last few unlucky generations left
                 # us with. This is the escape hatch for early convergence: sigma alone
                 # decaying to its floor never recovers on its own once the population
-                # has drifted into a bad corner.
+                # has drifted into a bad corner. Restarting the sigma schedule is what
+                # makes the escape real -- widening for a single generation and then
+                # snapping back to the floor would leave the new population stranded.
+                sigma_epoch = 0
+                base_sigma = max(.012,.075*(.92**sigma_epoch))
                 sigma = min(0.075, base_sigma * stagnation_sigma_boost)
                 champion = replace(best_ever_champion)
                 pop = [replace(champion)]
@@ -450,13 +505,15 @@ class StrategyTrainer:
                   f"top12={champion_metrics['top12_rate']:.3f} final={champion_metrics['final_rate']:.3f} "
                   f"champ={champion_metrics['champion_rate']:.3f} avg_rank={champion_metrics['avg_rank']:.2f} "
                   f"(in-sample best {in_sample['fitness']:.4f}) [best_ever={best_ever_metrics['fitness']:.4f} 停滞={stagnation_count}/{stagnation_patience}]", flush=True)
-            hall.append(champion); hall=hall[-12:]
+            hall.append((champion_metrics["fitness"], champion))
+            hall=sorted(hall, key=lambda x:-x[0])[:self.HALL_SIZE]
             new=elites[:]
             while len(new)<population:
                 child=self.crossover(self.rng.choice(elites),self.rng.choice(elites)) if self.rng.random()<.65 else self.rng.choice(elites)
                 new.append(self.mutate(child,sigma))
             pop=new
             (ap/f"gen_{g+1:03d}.json").write_text(json.dumps({"generation":g+1,"champion":asdict(champion),"metrics":champion_metrics},ensure_ascii=False,indent=2),encoding="utf-8")
+            sigma_epoch += 1
 
         if re_ranked is None:
             raise ValueError("fit() requires generations >= 1 (or an existing checkpoint to resume from)")
