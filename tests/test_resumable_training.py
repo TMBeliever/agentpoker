@@ -113,3 +113,30 @@ def test_trainer_profiles_injection(tmp_path):
     # Verify opponents generation draws from profile candidates
     opps = trainer._opponents(StrategyParams(), [], [], seed=999)
     assert len(opps) == 11  # pool_size - 1
+
+def test_trainer_base_model_seeding(tmp_path, monkeypatch):
+    monkeypatch.setattr("agentpoker.training._evaluate_worker", _mock_evaluate_worker)
+    archive_dir = tmp_path / "archive_empty"
+    save_path = tmp_path / "champion_seeded.json"
+
+    base_file = tmp_path / "base_model.json"
+    custom_params = asdict(StrategyParams(vpip=0.45, open_size=3.10))
+    base_file.write_text(json.dumps({"params": custom_params}), encoding="utf-8")
+
+    trainer = StrategyTrainer(seed=42, pool_size=12, equity_samples=0, workers=1)
+    champ, report = trainer.fit(
+        generations=1,
+        population=4,
+        runs_per_candidate=2,
+        final_race=1,
+        save=str(save_path),
+        archive=str(archive_dir),
+        resume=True,
+        base_model=str(base_file)
+    )
+
+    assert save_path.exists()
+    assert (archive_dir / "gen_001.json").exists()
+    history = report["training"]
+    assert len(history) == 1
+    assert history[0]["generation"] == 1

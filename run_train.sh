@@ -41,6 +41,7 @@ if [ -n "${MIX_PROFILES:-}" ]; then EXTRA+=(--mix-profiles); fi
 if [ -n "${PROFILE_MIN_HANDS:-}" ]; then EXTRA+=(--profile-min-hands "$PROFILE_MIN_HANDS"); fi
 if [ -n "${PROFILE_SHARE:-}" ]; then EXTRA+=(--profile-share "$PROFILE_SHARE"); fi
 if [ -n "${PROFILES:-}" ]; then EXTRA+=(--profiles "$PROFILES"); fi
+if [ -n "${BASE_MODEL:-}" ]; then EXTRA+=(--base-model "$BASE_MODEL"); fi
 
 uv run python -m agentpoker.cli train \
   --generations "${GENERATIONS:-30}" \

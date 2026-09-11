@@ -429,7 +429,7 @@ class StrategyTrainer:
         return list(zip(results,pop))
 
     def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True,reeval_runs=24,
-            stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01,resume_revert_margin=0.05):
+            stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01,resume_revert_margin=0.05,base_model=None):
         ap=Path(archive); ap.mkdir(parents=True,exist_ok=True)
         start_gen=0; history=[]; hall=[]; champion=None; champion_metrics=None
 
@@ -459,6 +459,25 @@ class StrategyTrainer:
                 hall = [(h["metrics"]["fitness"], StrategyParams(**h["params"]))
                         for h in sorted(history, key=lambda x: -x["metrics"]["fitness"])[:self.HALL_SIZE]]
                 print(f"[Training] 发现历史存档！从 Generation {start_gen} 自动恢复续训 (已有历史: {len(history)} 代, 当前最强 Fitness: {champion_metrics['fitness']:.4f})", flush=True)
+
+        if not history and base_model:
+            base_params = None
+            if isinstance(base_model, StrategyParams):
+                base_params = replace(base_model)
+            elif isinstance(base_model, dict):
+                base_params = StrategyParams(**base_model.get("params", base_model))
+            elif isinstance(base_model, (str, Path)):
+                bp = Path(base_model)
+                if bp.exists():
+                    try:
+                        d = json.loads(bp.read_text(encoding="utf-8"))
+                        base_params = StrategyParams(**d.get("params", d))
+                    except Exception as e:
+                        print(f"[Training] 警告: 加载初始底模 {base_model} 失败: {e}", flush=True)
+            if base_params is not None:
+                champion = base_params
+                hall = [(0.50, replace(base_params))]
+                print(f"[Training] 成功加载初始底模: {base_model}！第一代种群将基于该模型微调繁衍", flush=True)
 
         # Best-ever tracking for stagnation detection. The old schedule shrank the
         # mutation step size purely as a function of generation count (0.92**g), so

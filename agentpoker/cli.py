@@ -115,6 +115,7 @@ def main():
     t.add_argument('--no-resume',dest='resume',action='store_false',default=True,help='关闭续训：忽略已有存档、从第 1 代重训（默认会自动从存档继续）')
     t.add_argument('--reeval-runs',type=int,default=40,help='每代初选后用全新对手池复评的场数，用于消除「冠军只是抽样运气」的偏差')
     t.add_argument('--holdout-frac',type=float,default=0.25,help='留出集比例：这部分真实画像不参与训练，只用于最终验证泛化能力（默认 25%%）')
+    t.add_argument('--base-model',default=None,help='初始底模路径（如 models/champion.json）。没有历史存档或新开特训时以此模型为起点微调，避免从零冷启动')
     e=sub.add_parser('evaluate',help='离线评估：让指定模型跟真实画像打 N 场锦标赛，看泛化表现（不上真实赛场）')
     e.add_argument('--strategy',default='models/champion.json',help='要评估的模型文件路径')
     e.add_argument('--runs',type=int,default=500,help='评估场数。场数越多置信区间越窄，500 场时标准误约 ±0.016')
@@ -178,17 +179,24 @@ def main():
         else:
             track = 'targeted' if args.profiles else 'universal'
 
+        base_model = args.base_model
         if track == 'targeted':
             save_path = args.save or 'models/champion_targeted.json'
             archive_dir = args.archive or 'models/archive_targeted'
             profiles_src = args.profiles or 'models/opponent_profiles.json'
+            if base_model is None and os.path.exists('models/champion.json'):
+                base_model = 'models/champion.json'
             print(f"[Train] === 启动【赛场特训收割轨 (Targeted)】===")
+            if base_model:
+                print(f"[Train] 初始底模: {base_model} (基于该模型微调收割画像)")
             print(f"[Train] 挂载对手画像: {profiles_src} | 模型保存: {save_path} | 归档: {archive_dir}")
         else:
             save_path = args.save or 'models/champion_universal.json'
             archive_dir = args.archive or 'models/archive_universal'
             profiles_src = (args.profiles or 'models/opponent_profiles.json') if args.mix_profiles else None
             print(f"[Train] === 启动【通用自演化基石轨 (Universal)】===")
+            if base_model:
+                print(f"[Train] 初始底模: {base_model}")
             if profiles_src:
                 print(f"[Train] 混练模式: 原型池 + 优质画像 (门槛>={args.profile_min_hands}手, 占比<={args.profile_share:.0%}) | 画像源: {profiles_src}")
             else:
@@ -201,7 +209,7 @@ def main():
             print(f"[Train] 画像质量筛选: {n_prof} 位通过门槛 (>={args.profile_min_hands} 手)")
             if n_prof and n_prof < 10:
                 print(f"[Train] 警告: 通过门槛的画像仅 {n_prof} 位，对手池多样性偏低，建议下调 --profile-min-hands")
-        champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume, reeval_runs=args.reeval_runs)
+        champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume, reeval_runs=args.reeval_runs, base_model=base_model)
         
         if track == 'universal' and save_path == 'models/champion_universal.json':
             try:

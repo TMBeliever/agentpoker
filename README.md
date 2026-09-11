@@ -36,9 +36,9 @@ SAVE=models/champion_new.json ./run_train.sh --no-resume
 MIX_PROFILES=1 PROFILE_MIN_HANDS=300 PROFILE_SHARE=0.5 \
 SAVE=models/champion.json ./run_train.sh --no-resume
 
-# 针对真实对手画像的定向训练（画像占满对手池）
+# 针对真实对手画像的定向训练（默认自动以 models/champion.json 为底模微调，也可显式指定 --base-model）
 SAVE=models/champion_targeted.json uv run python -m agentpoker.cli train \
-  --track targeted --profiles models/opponent_profiles.json
+  --track targeted --profiles models/opponent_profiles.json --base-model models/champion.json
 
 # 从已有存档续训（默认行为）
 ./run_train.sh
@@ -81,6 +81,7 @@ SAVE=models/champion_targeted.json uv run python -m agentpoker.cli train \
 | `PROFILE_MIN_HANDS` | `--profile-min-hands` | 100 | 画像质量门槛，低于此手数不采用 |
 | `PROFILE_SHARE` | `--profile-share` | 0.5 | 画像在对手池中占比上限，其余留给原型 |
 | `PROFILES` | `--profiles` | models/opponent_profiles.json | 画像文件路径 |
+| `BASE_MODEL` | `--base-model` | 自动识别 | 初始底模路径（如 `models/champion.json`）。无存档时以此模型为起点微调，避免从零冷启动 |
 
 耗时参考（8 核，16 候选/代）：36 人 × 120 场约 9 分钟/代；96 人 × 120 场约 15 分钟/代。单场锦标赛实测 36 人 2.2 秒、96 人 3.7 秒。
 
