@@ -677,37 +677,49 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               </label>
             </div>
 
-            <!-- 真实画像自定义勾选抽屉 -->
-            <div class="pt-2 border-t border-slate-800/80">
+            <!-- 真实画像自定义勾选面板 -->
+            <div class="pt-2 border-t border-slate-800/80 space-y-2">
               <div class="flex items-center justify-between">
-                <button type="button" onclick="toggleRosterDrawer()" class="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition">
-                  <i class="fa-solid fa-users-viewfinder"></i> 
-                  <span>自定义参训真实选手</span>
-                  <span id="lblSelectedCount" class="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-700 text-amber-300">加载中...</span>
-                  <i id="icoRosterToggle" class="fa-solid fa-chevron-down text-[10px] transition-transform"></i>
-                </button>
-                <span class="text-[10px] text-slate-500" id="lblRosterSummary">能力排行勾选</span>
+                <label class="text-xs text-amber-400 font-bold flex items-center gap-1.5">
+                  <i class="fa-solid fa-users text-amber-400"></i> 
+                  <span>参训真实选手挑选</span>
+                </label>
+                <span id="lblSelectedCount" class="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 border border-emerald-700 text-emerald-300">加载中...</span>
               </div>
 
-              <div id="rosterDrawer" class="hidden mt-2.5 p-2 bg-slate-950/90 rounded-lg border border-slate-800 space-y-2">
-                <!-- 顶部快捷操作栏 -->
-                <div class="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-slate-800 text-[10px]">
-                  <div class="flex flex-wrap gap-1">
-                    <button type="button" onclick="selectProfiles('all')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">全选</button>
-                    <button type="button" onclick="selectProfiles('none')" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">清空</button>
-                    <button type="button" onclick="selectProfiles('top20')" class="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700 hover:bg-emerald-900 text-emerald-300">前20强</button>
-                    <button type="button" onclick="selectProfiles('station')" class="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-300">跟注站/鱼</button>
-                    <button type="button" onclick="selectProfiles('maniac')" class="px-2 py-0.5 rounded bg-red-950/80 border border-red-700 hover:bg-red-900 text-red-300">狂徒/松凶</button>
-                  </div>
+              <!-- 快捷预设按钮组 -->
+              <div class="flex flex-wrap items-center gap-1 text-[10px]">
+                <button type="button" onclick="selectProfiles('all')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition">全选(63人)</button>
+                <button type="button" onclick="selectProfiles('top20')" class="px-2 py-1 rounded bg-emerald-950/80 border border-emerald-700 hover:bg-emerald-900 text-emerald-300 transition">前20强劲敌</button>
+                <button type="button" onclick="selectProfiles('station')" class="px-2 py-1 rounded bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-300 transition">跟注站/鱼群</button>
+                <button type="button" onclick="selectProfiles('maniac')" class="px-2 py-1 rounded bg-red-950/80 border border-red-700 hover:bg-red-900 text-red-300 transition">狂徒/松凶</button>
+                <button type="button" onclick="selectProfiles('none')" class="px-1.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 transition">清空</button>
+              </div>
+
+              <!-- 大弹窗挑选入口按钮 + 折叠切换按钮 -->
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="openRosterModal()" class="flex-1 py-2 px-2.5 rounded-lg bg-gradient-to-r from-amber-600/30 via-slate-800 to-amber-600/30 hover:from-amber-600/50 hover:to-amber-600/50 border border-amber-500/60 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 transition shadow">
+                  <i class="fa-solid fa-users-viewfinder"></i>
+                  <span>全景大屏挑选 (展示完整名字/战力)</span>
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </button>
+                <button type="button" onclick="toggleRosterDrawer()" id="btnToggleDrawer" class="py-2 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1 transition" title="展开/收起就地列表">
+                  <span id="lblDrawerAction">展开</span>
+                  <i id="icoRosterToggle" class="fa-solid fa-chevron-down text-[10px] transition-transform"></i>
+                </button>
+              </div>
+
+              <!-- 优化后的就地折叠列表 -->
+              <div id="rosterDrawer" class="hidden mt-2 p-2 bg-slate-950/95 rounded-lg border border-slate-800 space-y-2 shadow-inner">
+                <div class="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-800 text-[10px]">
+                  <span class="text-slate-400">就地快速勾选:</span>
                   <select id="selRosterSort" onchange="renderRosterList()" class="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-slate-300 text-[10px]">
                     <option value="bb">按 战力(BB/100) 降序</option>
                     <option value="hands">按 对战手数 降序</option>
                     <option value="vpip">按 入池激进度 降序</option>
                   </select>
                 </div>
-
-                <!-- 选手列表容器 -->
-                <div id="rosterList" class="max-h-[220px] overflow-y-auto space-y-1.5 pr-1 text-xs">
+                <div id="rosterList" class="max-h-[300px] overflow-y-auto space-y-2 pr-1 text-xs">
                   <div class="text-center py-4 text-slate-500 text-xs">正在加载赛场画像库...</div>
                 </div>
               </div>
@@ -1211,14 +1223,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function toggleRosterDrawer() {
       const drawer = document.getElementById("rosterDrawer");
       const icon = document.getElementById("icoRosterToggle");
+      const actionText = document.getElementById("lblDrawerAction");
       rosterDrawerOpen = !rosterDrawerOpen;
       if (rosterDrawerOpen) {
         drawer.classList.remove("hidden");
         if (icon) icon.classList.add("rotate-180");
+        if (actionText) actionText.innerText = "收起";
       } else {
         drawer.classList.add("hidden");
         if (icon) icon.classList.remove("rotate-180");
+        if (actionText) actionText.innerText = "展开";
       }
+    }
+
+    function openRosterModal() {
+      const modal = document.getElementById("rosterModal");
+      if (modal) {
+        modal.classList.remove("hidden");
+        renderRosterList();
+      }
+    }
+
+    function closeRosterModal() {
+      const modal = document.getElementById("rosterModal");
+      if (modal) modal.classList.add("hidden");
+    }
+
+    function syncAndRenderRoster(val) {
+      const selInline = document.getElementById("selRosterSort");
+      const selModal = document.getElementById("selModalRosterSort");
+      if (selInline) selInline.value = val;
+      if (selModal) selModal.value = val;
+      renderRosterList();
     }
 
     function getArchetypeBadge(archetype) {
@@ -1254,7 +1290,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       try {
         const res = await fetch("/api/profiles");
         cachedProfiles = await res.json();
-        // 默认全选所有画像
         selectedProfileIds = new Set(cachedProfiles.map(p => p.id));
         updateRosterCount();
         renderRosterList();
@@ -1265,31 +1300,66 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function updateRosterCount() {
       const lbl = document.getElementById("lblSelectedCount");
-      if (lbl && cachedProfiles) {
-        lbl.innerText = `${selectedProfileIds.size} / ${cachedProfiles.length} 人`;
-        if (selectedProfileIds.size === 0) {
-          lbl.className = "text-[10px] px-1.5 py-0.2 rounded bg-red-950/80 border border-red-700 text-red-300";
-        } else if (selectedProfileIds.size === cachedProfiles.length) {
-          lbl.className = "text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-700 text-emerald-300";
-        } else {
-          lbl.className = "text-[10px] px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-700 text-amber-300";
+      const modalLbl = document.getElementById("lblModalSelectedCount");
+      if (cachedProfiles) {
+        const txt = `已选 ${selectedProfileIds.size} / ${cachedProfiles.length} 人`;
+        if (lbl) {
+          lbl.innerText = txt;
+          if (selectedProfileIds.size === 0) {
+            lbl.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-red-950 border border-red-700 text-red-300";
+          } else if (selectedProfileIds.size === cachedProfiles.length) {
+            lbl.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 border border-emerald-700 text-emerald-300";
+          } else {
+            lbl.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-amber-950 border border-amber-700 text-amber-300";
+          }
+        }
+        if (modalLbl) {
+          modalLbl.innerText = txt;
+          modalLbl.className = selectedProfileIds.size === 0
+            ? "text-xs font-bold px-3 py-1 rounded-full bg-red-950 text-red-300 border border-red-700 shadow-sm"
+            : (selectedProfileIds.size === cachedProfiles.length
+              ? "text-xs font-bold px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm"
+              : "text-xs font-bold px-3 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-700 shadow-sm");
         }
       }
     }
 
     function renderRosterList() {
-      const container = document.getElementById("rosterList");
-      if (!container || !cachedProfiles || cachedProfiles.length === 0) return;
+      const inlineContainer = document.getElementById("rosterList");
+      const modalContainer = document.getElementById("rosterModalList");
+      if (!cachedProfiles || cachedProfiles.length === 0) return;
 
-      const sortMode = document.getElementById("selRosterSort") ? document.getElementById("selRosterSort").value : "bb";
+      const searchInput = document.getElementById("inpRosterSearch");
+      const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+
+      const selModal = document.getElementById("selModalRosterSort");
+      const selInline = document.getElementById("selRosterSort");
+      const sortMode = (selModal && selModal.value) || (selInline ? selInline.value : "bb");
+
       const sorted = [...cachedProfiles].sort((a, b) => {
         if (sortMode === "hands") return b.hands - a.hands;
         if (sortMode === "vpip") return b.vpip - a.vpip;
         return b.bb_100 - a.bb_100;
       });
 
-      let html = "";
-      sorted.forEach((p, idx) => {
+      const filtered = sorted.filter(p => {
+        if (!query) return true;
+        return (p.name && p.name.toLowerCase().includes(query)) ||
+               (p.archetype && p.archetype.toLowerCase().includes(query)) ||
+               (p.advice && p.advice.toLowerCase().includes(query));
+      });
+
+      let inlineHtml = "";
+      let modalHtml = "";
+
+      if (filtered.length === 0) {
+        const emptyMsg = `<div class="text-center py-8 text-slate-500 text-xs col-span-full">未找到匹配 "${query}" 的选手</div>`;
+        if (inlineContainer) inlineContainer.innerHTML = emptyMsg;
+        if (modalContainer) modalContainer.innerHTML = emptyMsg;
+        return;
+      }
+
+      filtered.forEach((p, idx) => {
         const isChecked = selectedProfileIds.has(p.id);
         const badgeHtml = getArchetypeBadge(p.archetype);
         const bbColor = p.bb_100 >= 0 ? "text-emerald-400" : "text-red-400";
@@ -1297,25 +1367,58 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const rankNo = idx + 1;
         const rankClass = rankNo <= 3 ? "text-amber-400 font-bold" : (rankNo <= 10 ? "text-slate-300 font-medium" : "text-slate-500");
 
-        html += `
-          <div class="flex items-center justify-between p-1.5 rounded bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 transition text-[11px] group ${isChecked ? '' : 'opacity-40'}">
-            <div class="flex items-center space-x-2 min-w-0">
-              <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleProfileSelection('${p.id}')" class="rounded bg-slate-950 border-slate-700 text-amber-500 cursor-pointer">
-              <span class="w-5 text-right font-mono text-[10px] ${rankClass}">#${rankNo}</span>
-              <span class="font-medium text-slate-200 truncate max-w-[90px] sm:max-w-[120px]" title="${p.name} (${p.id})">${p.name}</span>
-              ${badgeHtml}
+        // 1. Modal Spacious Card Grid View (完整大名字、不截断)
+        modalHtml += `
+          <div onclick="toggleProfileSelection('${p.id}')" class="p-3 rounded-xl border transition cursor-pointer flex flex-col justify-between space-y-2.5 ${isChecked ? 'bg-slate-900 border-amber-500/60 shadow-md shadow-amber-950/20 ring-1 ring-amber-500/30' : 'bg-slate-950/60 border-slate-800/80 opacity-55 hover:opacity-90'}">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center space-x-2.5 min-w-0">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleProfileSelection('${p.id}');" class="rounded bg-slate-950 border-slate-700 text-amber-500 cursor-pointer w-4 h-4 shrink-0">
+                <span class="font-mono text-xs font-bold ${rankClass}">#${rankNo}</span>
+                <span class="text-sm font-bold text-white tracking-wide break-words" title="${p.name} (${p.id})">${p.name}</span>
+              </div>
+              <div class="shrink-0">
+                ${badgeHtml}
+              </div>
             </div>
-            <div class="flex items-center space-x-2.5 text-right shrink-0">
-              <span class="font-mono font-bold ${bbColor}" title="能力战力 BB/100">${bbSign}${p.bb_100}</span>
-              <span class="text-slate-400 text-[10px] hidden sm:inline" title="样本手数">${p.hands}手</span>
-              <span class="text-slate-500 text-[10px] hidden md:inline" title="入池率 VPIP">${p.vpip}%</span>
-              <span class="text-slate-500 text-[10px] hidden md:inline" title="激进度 AF">AF ${p.af}</span>
-              <span class="cursor-help text-slate-400 hover:text-amber-300" title="💡 战术剥削建议: ${p.advice}"><i class="fa-solid fa-circle-info"></i></span>
+            <div class="flex items-center justify-between text-xs pt-1 border-t border-slate-800/60 font-mono">
+              <span class="font-bold ${bbColor}" title="大盲百手收益">${bbSign}${p.bb_100} BB/100</span>
+              <span class="text-slate-400" title="样本手数">${p.hands}手</span>
+              <span class="text-slate-400" title="入池率">VPIP ${p.vpip}%</span>
+              <span class="text-slate-400" title="激进度">AF ${p.af}</span>
+            </div>
+            <div class="text-[11px] text-amber-300/90 bg-slate-950 p-2 rounded-lg border border-slate-800/80 leading-relaxed flex items-start gap-1.5">
+              <i class="fa-solid fa-lightbulb text-amber-400 mt-0.5 shrink-0 text-xs"></i>
+              <span>${p.advice || '常规防守与价值下注'}</span>
+            </div>
+          </div>
+        `;
+
+        // 2. Inline Collapsible Drawer Item (两行式布局，名字完整不截断)
+        inlineHtml += `
+          <div onclick="toggleProfileSelection('${p.id}')" class="p-2 rounded-lg border transition cursor-pointer space-y-1 ${isChecked ? 'bg-slate-900 border-amber-500/40' : 'bg-slate-950/60 border-slate-800 opacity-50'}">
+            <div class="flex items-center justify-between gap-1.5">
+              <div class="flex items-center space-x-2 min-w-0">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleProfileSelection('${p.id}');" class="rounded bg-slate-950 border-slate-700 text-amber-500 cursor-pointer shrink-0">
+                <span class="font-mono text-[10px] ${rankClass}">#${rankNo}</span>
+                <span class="font-bold text-white text-xs break-words" title="${p.name} (${p.id})">${p.name}</span>
+              </div>
+              <div class="shrink-0">
+                ${badgeHtml}
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pl-6">
+              <span class="font-bold ${bbColor}">${bbSign}${p.bb_100} BB</span>
+              <span>${p.hands}手</span>
+              <span>VPIP ${p.vpip}%</span>
+              <span>AF ${p.af}</span>
+              <span class="cursor-help text-slate-400 hover:text-amber-300" title="💡 针对建议: ${p.advice}"><i class="fa-solid fa-circle-info text-amber-400"></i></span>
             </div>
           </div>
         `;
       });
-      container.innerHTML = html;
+
+      if (inlineContainer) inlineContainer.innerHTML = inlineHtml;
+      if (modalContainer) modalContainer.innerHTML = modalHtml;
     }
 
     function toggleProfileSelection(id) {
@@ -1780,6 +1883,69 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       setInterval(refreshLogs, 4000);
     };
   </script>
+
+  <!-- Modal for full-view roster selection -->
+  <div id="rosterModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-users-viewfinder text-amber-400 text-lg"></i>
+            <span>赛场真实选手全景花名册与能力排行榜</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">每位真实选手的战术风格、盈利战力与剥削建议均已深度标注，自由勾选参训对手以打造定制化陪练池。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="lblModalSelectedCount" class="text-xs font-bold px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm">
+            已勾选: 63 / 63 人
+          </span>
+          <button onclick="closeRosterModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Controls & Search Toolbar -->
+      <div class="p-3 sm:px-5 py-3 border-b border-slate-800/80 bg-slate-900 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" onclick="selectProfiles('all')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition font-medium">全选(63人)</button>
+          <button type="button" onclick="selectProfiles('top20')" class="px-2.5 py-1 rounded bg-emerald-950/80 border border-emerald-700 hover:bg-emerald-900 text-emerald-300 transition font-medium">前20强劲敌</button>
+          <button type="button" onclick="selectProfiles('station')" class="px-2.5 py-1 rounded bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-300 transition font-medium">跟注站/被动鱼</button>
+          <button type="button" onclick="selectProfiles('maniac')" class="px-2.5 py-1 rounded bg-red-950/80 border border-red-700 hover:bg-red-900 text-red-300 transition font-medium">狂徒/松凶高手</button>
+          <button type="button" onclick="selectProfiles('none')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 transition font-medium">清空</button>
+        </div>
+
+        <div class="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+          <div class="relative min-w-[180px]">
+            <input type="text" id="inpRosterSearch" oninput="renderRosterList()" placeholder="🔍 快速搜索选手姓名..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500">
+          </div>
+          <select id="selModalRosterSort" onchange="syncAndRenderRoster(this.value)" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 text-xs">
+            <option value="bb">按 战力(BB/100) 降序</option>
+            <option value="hands">按 对战手数 降序</option>
+            <option value="vpip">按 入池激进度 降序</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Modal Card Grid Container -->
+      <div class="p-4 sm:p-5 overflow-y-auto flex-1 bg-slate-950/40">
+        <div id="rosterModalList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- Dynamic cards rendered by renderRosterList -->
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 sm:px-5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+        <div class="text-xs text-slate-400">
+          💡 点击整张选手卡片即可快速勾选 / 取消，所选对手将即时同步至训练对抗池。
+        </div>
+        <button onclick="closeRosterModal()" class="px-5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs rounded-lg transition shadow">
+          确定并保存勾选
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal for viewing model JSON -->
   <div id="jsonModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
