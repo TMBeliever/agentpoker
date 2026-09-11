@@ -622,33 +622,44 @@ class StrategyTrainer:
             workers=race_workers,
             seed=self.seed,
         )
-        print(f"\n[Training] 启动终局大验证 (Final Race: {final_race} 场, {race_workers} 核并发加速)...", flush=True)
 
-        print(f"  [1/3 终局验证] 留出集验证: 平滑精英策略 (Stable Champion)...", flush=True)
-        final_metrics = evaluator.evaluate(
-            stable_champion,
-            runs=max(1, final_race),
-            opponents=holdout_pool,
-            seed_offset=987654321,
-            verbose=True,
-        )
+        candidates = [
+            ("平滑精英策略 (Stable Champion)", stable_champion, champion_metrics),
+            ("末代冠军策略 (Last-Gen Champion)", champion, champion_metrics),
+        ]
+        if best_ever_champion is not None and asdict(best_ever_champion) != asdict(champion):
+            candidates.append(("全周期峰值冠军 (All-Time Peak Champion)", best_ever_champion, best_ever_metrics))
 
-        print(f"  [2/3 终局验证] 留出集验证: 原始冠军策略 (Raw Champion)...", flush=True)
-        best_elite_metrics = evaluator.evaluate(
-            champion,
-            runs=max(1, final_race),
-            opponents=holdout_pool,
-            seed_offset=987654321,
-            verbose=True,
-        )
+        total_cands = len(candidates)
+        print(f"\n[Training] 启动终局大验证 (Final Race: {final_race} 场, {total_cands} 个候选, {race_workers} 核并发加速)...", flush=True)
 
-        if best_elite_metrics["fitness"] > final_metrics["fitness"]:
-            final_champ = champion
-            final_metrics = best_elite_metrics
-            print("  -> 原始冠军策略表现更优，采纳为最终模型！", flush=True)
-        else:
-            final_champ = stable_champion
-            print("  -> 平滑精英策略表现更优，采纳为最终模型！", flush=True)
+        best_cand_name = None
+        best_cand_champ = None
+        best_cand_metrics = None
+        best_cand_train_metrics = None
+
+        for i, (cand_name, cand_strat, cand_tm) in enumerate(candidates, 1):
+            print(f"  [{i}/{total_cands} 终局验证] 留出集验证: {cand_name}...", flush=True)
+            m = evaluator.evaluate(
+                cand_strat,
+                runs=max(1, final_race),
+                opponents=holdout_pool,
+                seed_offset=987654321,
+                verbose=True,
+            )
+            print(f"    -> fitness={m['fitness']:.4f}±{m.get('fitness_se',0.0):.4f} "
+                  f"BB/100={m.get('avg_bb100',0):+.1f} top12={m.get('top12_rate',0)*100:.1f}% "
+                  f"champ={m.get('champion_rate',0)*100:.1f}% avg_rank={m.get('avg_rank',0):.1f}", flush=True)
+            if best_cand_metrics is None or m["fitness"] > best_cand_metrics["fitness"]:
+                best_cand_name = cand_name
+                best_cand_champ = cand_strat
+                best_cand_metrics = m
+                best_cand_train_metrics = cand_tm
+
+        final_champ = best_cand_champ
+        final_metrics = best_cand_metrics
+        final_train_metrics = best_cand_train_metrics or champion_metrics
+        print(f"  🏆 终局裁决: [{best_cand_name}] 表现最强，采纳为最终模型！", flush=True)
 
         print(f"  [3/3 终局验证] 训练分布参考基线...", flush=True)
         train_pool = self._draw_pool(pop, hall, self.seed * 31337, self._train_profile_params)
@@ -671,7 +682,7 @@ class StrategyTrainer:
         print(f"[Training] 训练分布参考 fitness={train_metrics['fitness']:.4f} "
               f"top12={train_metrics['top12_rate']:.3f} (对手池含进化种群与名人堂，强度不同，不可直接与留出集相减)", flush=True)
         out=Path(save); out.parent.mkdir(parents=True,exist_ok=True)
-        out.write_text(json.dumps({"version":5,"params":asdict(final_champ),"training_metrics":champion_metrics,
+        out.write_text(json.dumps({"version":5,"params":asdict(final_champ),"training_metrics":final_train_metrics,
                                    "final_race":final_metrics,"train_race":train_metrics,"history":history},
                                   ensure_ascii=False,indent=2),encoding="utf-8")
         return final_champ,{"training":history,"final_race":final_metrics,"train_race":train_metrics}
