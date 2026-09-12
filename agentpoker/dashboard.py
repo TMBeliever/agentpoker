@@ -96,11 +96,13 @@ class ProcessManager:
                         custom_p = ROOT_DIR / "models" / ".custom_selected_profiles.json"
                         custom_p.write_text(json.dumps(filtered, ensure_ascii=False, indent=2), encoding="utf-8")
                         profiles_file = "models/.custom_selected_profiles.json"
+                        # 用户显式勾选的选手，免受 min_hands 门槛意外剔除，确保100%参训
+                        min_hands = "0"
                 except Exception:
                     pass
 
         if opp_mode == "pure_human":
-            cmd.extend(["--track", "targeted", "--profiles", profiles_file, "--profile-min-hands", min_hands])
+            cmd.extend(["--track", "targeted", "--profiles", profiles_file, "--profile-min-hands", min_hands, "--profile-share", "1.0"])
         elif opp_mode == "mix":
             cmd.extend(["--mix-profiles", "--profiles", profiles_file, "--profile-min-hands", min_hands, "--profile-share", "0.5"])
         else: # archetypes
@@ -689,6 +691,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
               <!-- 快捷预设按钮组 -->
               <div class="flex flex-wrap items-center gap-1 text-[10px]">
+                <button type="button" onclick="selectProfiles('pyramid')" class="px-2 py-1 rounded bg-indigo-950/90 border border-indigo-500/80 hover:bg-indigo-900 text-indigo-200 transition font-bold shadow-sm" title="按 30% 顶级鲨鱼 + 40% 中游稳健 + 30% 提款机弱鱼 智能配比"><i class="fa-solid fa-layer-group text-[9px] mr-1"></i>金字塔生态(36人:强中弱)</button>
                 <button type="button" onclick="selectProfiles('all')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition">全选(63人)</button>
                 <button type="button" onclick="selectProfiles('top20')" class="px-2 py-1 rounded bg-emerald-950/80 border border-emerald-700 hover:bg-emerald-900 text-emerald-300 transition">前20强劲敌</button>
                 <button type="button" onclick="selectProfiles('station')" class="px-2 py-1 rounded bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-300 transition">跟注站/鱼群</button>
@@ -1302,7 +1305,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const lbl = document.getElementById("lblSelectedCount");
       const modalLbl = document.getElementById("lblModalSelectedCount");
       if (cachedProfiles) {
-        const txt = `已选 ${selectedProfileIds.size} / ${cachedProfiles.length} 人`;
+        let nShark = 0, nMid = 0, nFish = 0;
+        selectedProfileIds.forEach(id => {
+          const p = cachedProfiles.find(x => x.id === id);
+          if (p) {
+            if (p.bb_100 >= 30) nShark++;
+            else if (p.bb_100 <= -30) nFish++;
+            else nMid++;
+          }
+        });
+        const breakdown = selectedProfileIds.size > 0 ? ` (强${nShark}:中${nMid}:弱${nFish})` : '';
+        const txt = `已选 ${selectedProfileIds.size} / ${cachedProfiles.length} 人${breakdown}`;
         if (lbl) {
           lbl.innerText = txt;
           if (selectedProfileIds.size === 0) {
@@ -1310,7 +1323,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           } else if (selectedProfileIds.size === cachedProfiles.length) {
             lbl.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 border border-emerald-700 text-emerald-300";
           } else {
-            lbl.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-amber-950 border border-amber-700 text-amber-300";
+            lbl.className = "text-[10px] px-2 py-0.5 rounded font-bold bg-indigo-950 border border-indigo-700 text-indigo-300";
           }
         }
         if (modalLbl) {
@@ -1319,7 +1332,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             ? "text-xs font-bold px-3 py-1 rounded-full bg-red-950 text-red-300 border border-red-700 shadow-sm"
             : (selectedProfileIds.size === cachedProfiles.length
               ? "text-xs font-bold px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm"
-              : "text-xs font-bold px-3 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-700 shadow-sm");
+              : "text-xs font-bold px-3 py-1 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-700 shadow-sm");
         }
       }
     }
@@ -1438,6 +1451,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         selectedProfileIds = new Set(cachedProfiles.map(p => p.id));
       } else if (type === "none") {
         selectedProfileIds.clear();
+      } else if (type === "pyramid") {
+        // 金字塔生态配平: 30% 顶级鲨鱼 + 40% 中游稳健 + 30% 提款机弱鱼 (选出 36 位代表性选手)
+        const sorted = [...cachedProfiles].sort((a, b) => b.bb_100 - a.bb_100);
+        const total = sorted.length;
+        if (total > 0) {
+          const targetTotal = Math.min(36, total);
+          const nTop = Math.max(1, Math.round(targetTotal * 0.30));     // 约 11 位强手
+          const nBottom = Math.max(1, Math.round(targetTotal * 0.30));  // 约 11 位弱鱼
+          const nMid = targetTotal - nTop - nBottom;                    // 约 14 位中游
+          
+          const topSharks = sorted.slice(0, nTop);
+          const bottomFish = sorted.slice(total - nBottom);
+          const midStart = Math.max(nTop, Math.floor((total - nMid) / 2));
+          const middleRegulars = sorted.slice(midStart, midStart + nMid);
+          
+          const balanced = [...topSharks, ...middleRegulars, ...bottomFish];
+          selectedProfileIds = new Set(balanced.map(p => p.id));
+        }
       } else if (type === "top20") {
         const top = [...cachedProfiles].sort((a, b) => b.bb_100 - a.bb_100).slice(0, 20);
         selectedProfileIds = new Set(top.map(p => p.id));
@@ -1909,6 +1940,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <!-- Controls & Search Toolbar -->
       <div class="p-3 sm:px-5 py-3 border-b border-slate-800/80 bg-slate-900 flex flex-wrap items-center justify-between gap-2.5 text-xs">
         <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" onclick="selectProfiles('pyramid')" class="px-2.5 py-1 rounded bg-indigo-950/90 border border-indigo-500/80 hover:bg-indigo-900 text-indigo-200 transition font-bold shadow-sm" title="自动挑选 11 位顶级强手 + 14 位中游稳健 + 11 位提款机弱鱼"><i class="fa-solid fa-layer-group text-[10px] mr-1"></i>金字塔生态 (强:中:弱 = 11:14:11)</button>
           <button type="button" onclick="selectProfiles('all')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition font-medium">全选(63人)</button>
           <button type="button" onclick="selectProfiles('top20')" class="px-2.5 py-1 rounded bg-emerald-950/80 border border-emerald-700 hover:bg-emerald-900 text-emerald-300 transition font-medium">前20强劲敌</button>
           <button type="button" onclick="selectProfiles('station')" class="px-2.5 py-1 rounded bg-amber-950/80 border border-amber-700 hover:bg-amber-900 text-amber-300 transition font-medium">跟注站/被动鱼</button>

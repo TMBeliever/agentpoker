@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import math
 from random import Random
 from .engine import NLHEngine
 from .context import build_context
@@ -31,15 +32,13 @@ class LeagueSimulator:
     def _context(self, aid, st, round_no, hands_remaining):
         return self._context_map(st, round_no, hands_remaining).get(aid, {})
 
-    def _context_map(self, st, round_no, hands_remaining):
-        """Tournament context for every agent, computed once per hand.
-
-        Standings only change between hands, so ranking them on every single decision
-        was pure waste (and one of the three hot paths in the simulator).
-        """
+    def _context_map(self, st, round_no, hands_remaining, table_strength_map=None):
+        """Tournament context for every agent, computed once per hand."""
         rows=self._standings(st)
         r12=next((x.bb100 for x in rows if x.rank==12),None); r13=next((x.bb100 for x in rows if x.rank==13),None)
-        return {x.agent_id:build_context(x.rank, x.bb100, r12, r13, hands_remaining, round_no)
+        ts_map = table_strength_map or {}
+        return {x.agent_id:build_context(x.rank, x.bb100, r12, r13, hands_remaining, round_no,
+                                          table_strength=ts_map.get(x.agent_id, 0.0))
                 for x in rows}
 
     def _play_group(self, group, st, round_no, hands_this_round):
@@ -47,6 +46,13 @@ class LeagueSimulator:
         for aid in group:
             st[aid]['stack']=100*self.big_blind
         policies={a.agent_id:a.strategy for a in self.agents}
+
+        # P1-2: Table strength metric for Swiss pairing and random rounds
+        group_bbs = [float(st[aid]['net_bb'] / max(1, st[aid]['hands']) * 100.0) if st[aid]['hands'] > 0 else 0.0 for aid in group]
+        avg_tbl_bb = sum(group_bbs) / max(1, len(group_bbs))
+        tbl_strength = max(-1.0, min(1.0, math.tanh(avg_tbl_bb / 40.0)))
+        ts_map = {aid: tbl_strength for aid in group}
+
         for hand_i in range(hands_this_round):
             # Each table session uses current stacks; busted seats auto-rebuy one full buy-in.
             for aid in group:
@@ -54,7 +60,7 @@ class LeagueSimulator:
             before={aid:st[aid]['stack'] for aid in group}
             hands_remaining=self.rounds*self.hpr-(round_no-1)*self.hpr-hand_i
             # Built once per hand: identical for every decision inside it.
-            provider=self._context_map(st,round_no,hands_remaining).get
+            provider=self._context_map(st,round_no,hands_remaining,table_strength_map=ts_map).get
             res,dealer=self.engine.play_hand(group,{aid:st[aid]['stack'] for aid in group},dealer,policies,context_provider=provider)
             for aid in group:
                 st[aid]['stack']=res.final_stacks[aid]

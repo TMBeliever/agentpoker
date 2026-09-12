@@ -6,7 +6,7 @@ from agentpoker.cards import card
 from agentpoker.calibration import (PREFLOP_PERCENTILE, strength_to_equity,
                                     hand_class, preflop_percentile)
 from agentpoker.context import (rank_from_bb100, boundary_bb100, synthetic_context,
-                                context_from_standings, QUALIFY_RANK)
+                                context_from_standings, QUALIFY_RANK, FIELD_SIZE)
 
 
 def test_preflop_percentile_ranks_hands_sensibly():
@@ -56,12 +56,12 @@ def test_rank_ladder_is_monotone():
     prev = None
     for bb10 in range(-500, 501, 5):
         r = rank_from_bb100(bb10 / 10.0)
-        assert 1 <= r <= 24
+        assert 1 <= r <= FIELD_SIZE
         if prev is not None:
             assert r <= prev, "a higher win rate must never yield a worse rank"
         prev = r
     assert rank_from_bb100(1e9) == 1
-    assert rank_from_bb100(-1e9) == 24
+    assert rank_from_bb100(-1e9) == FIELD_SIZE
 
 
 def test_synthetic_context_matches_simulator_shape():

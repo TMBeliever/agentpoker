@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
-from .training import ARCHETYPES, ArenaEvaluator, profile_to_params
+from .training import ARCHETYPES, ArenaEvaluator, profile_to_params, _load_params_safe
 
 
 @dataclass
@@ -239,14 +239,14 @@ def _battle_tournament_worker(payload: tuple) -> dict[str, Any]:
     comp_ids = [item[0] for item in competitor_payload]
     agents: list[SimAgent] = []
     for cid, cname, p_dict in competitor_payload:
-        p = StrategyParams(**p_dict)
+        p = _load_params_safe(p_dict)
         p = replace(p, equity_samples=equity_samples)
         agents.append(SimAgent(cid, StrategyAgent(p, seed=seed + 101, name=cname)))
 
     # 2. Build opponent agents with slight jitter
     needed_opponents = max(0, field_size - len(agents))
     for i in range(needed_opponents):
-        base_p = StrategyParams(**opponent_payload[i % len(opponent_payload)])
+        base_p = _load_params_safe(opponent_payload[i % len(opponent_payload)])
         jittered_p = _jitter_params(base_p, rng)
         jittered_p = replace(jittered_p, equity_samples=equity_samples)
         opp_id = f"opp_{i:02d}"
@@ -254,7 +254,7 @@ def _battle_tournament_worker(payload: tuple) -> dict[str, Any]:
 
     # Ensure total agents is at least 12 and multiple of 6
     while len(agents) < 12 or len(agents) % 6 != 0:
-        base_p = StrategyParams(**opponent_payload[len(agents) % len(opponent_payload)])
+        base_p = _load_params_safe(opponent_payload[len(agents) % len(opponent_payload)])
         opp_id = f"opp_{len(agents):02d}"
         agents.append(SimAgent(opp_id, StrategyAgent(base_p, seed=seed + 3000 + len(agents), name=opp_id)))
 

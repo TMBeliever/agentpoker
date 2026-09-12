@@ -14,6 +14,16 @@ class StrategyParams:
     threebet_frequency: float = 0.085
     squeeze_frequency: float = 0.055
     steal_frequency: float = 0.72
+    # Position-aware preflop ranges (P0 / P1 upgrade)
+    open_thresh_utg: float = 0.15
+    open_thresh_hj: float = 0.19
+    open_thresh_co: float = 0.27
+    open_thresh_btn: float = 0.48
+    open_thresh_sb: float = 0.36
+    defend_thresh_bb: float = 0.52
+    # Multiway & Table dynamics
+    multiway_decay: float = 0.50
+    table_strength_weight: float = 0.30
     # Postflop
     cbet_frequency: float = 0.62
     turn_barrel_frequency: float = 0.54
@@ -250,9 +260,10 @@ class StrategyAgent:
         else:
             aggression_freq = self.params.cbet_frequency
 
-        # Multiway pot discount: C-betting into multiple active players requires more caution
-        if active_opp > 1 and street == 3:
-            aggression_freq *= (0.75 ** (active_opp - 1))
+        # Multiway pot safety discount: C-betting and barreling into multiple active opponents
+        # decays exponentially using the multiway_decay parameter across all streets
+        if active_opp > 1:
+            aggression_freq *= (self.params.multiway_decay ** (active_opp - 1))
 
         # Opponent profile adjustments
         fold_edge = pot_odds - 0.045
@@ -282,6 +293,9 @@ class StrategyAgent:
         value_cut = street_cut - 0.06 * pressure
         if self.params.value_threshold != 0.68:
             value_cut += (self.params.value_threshold - 0.68) * 0.4
+        # Multiway winning hand requirement shifts up: two pair/sets needed when 3+ players contest
+        if active_opp > 1:
+            value_cut += 0.04 * (active_opp - 1)
         if villain.get("is_station"):
             # Stations call down with weaker holdings: widen value betting range
             value_cut -= 0.04
@@ -303,7 +317,9 @@ class StrategyAgent:
         thin_cut = max(self.params.thin_value_threshold, value_cut - 0.08)
         if strength >= semi_threshold and (draw_bias > 0 or strength > thin_cut):
             semi_cbet = aggression_freq * (0.65 + 0.5 * pressure)
-            if villain.get("fold", 0.52) > 0.58:
+            if active_opp > 1:
+                semi_cbet *= (self.params.multiway_decay ** (active_opp - 1))
+            if villain.get("fold", 0.52) > 0.58 and active_opp == 1:
                 semi_cbet *= 1.25
             if ("raise" in legal or "bet" in legal) and self._noise(semi_cbet):
                 # _sized_raise picks the right action type for the spot (bet when first
@@ -318,8 +334,8 @@ class StrategyAgent:
         bluff_rate *= (1.0 + pressure * 0.65)
         if villain.get("is_station"):
             bluff_rate *= 0.15  # Never bluff a calling station
-        elif villain.get("fold", 0.52) > 0.58:
-            bluff_rate *= 1.35  # High fold equity
+        elif villain.get("fold", 0.52) > 0.58 and active_opp == 1:
+            bluff_rate *= 1.35  # High fold equity heads-up
 
         # River blocker effect: nut flush blocker eliminates opponent's nut hands
         if street >= 5 and has_nut_flush_blocker:
@@ -330,10 +346,18 @@ class StrategyAgent:
                 # River polarized bluff: holding the nut flush blocker makes bluffs much higher equity
                 bluff_rate = max(bluff_rate, min(0.42, self.params.river_bluff_frequency * 2.0 + 0.12))
 
-        if "raise" in legal and self._noise(bluff_rate):
-            return self._sized_raise(legal, strength=max(strength, 0.25), value=False, pressure=pressure, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
-        if "bet" in legal and self._noise(bluff_rate):
-            return self._sized_bet(legal, value=False, pressure=pressure, pot=pot, bb_size=bb_size, street=street, wetness=texture["wetness"])
+        # Multiway bluff shutdown safety rules:
+        # P(fold) = prod(1 - p_i) decays geometrically; pure air bluffs into 3+ players have negative EV
+        if active_opp >= 2:
+            bluff_rate *= (0.35 ** (active_opp - 1))
+        if active_opp >= 3 and not has_nut_flush_blocker:
+            bluff_rate = 0.0  # Zero out air bluffs into 3+ opponents!
+
+        if bluff_rate > 0.0:
+            if "raise" in legal and self._noise(bluff_rate):
+                return self._sized_raise(legal, strength=max(strength, 0.25), value=False, pressure=pressure, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
+            if "bet" in legal and self._noise(bluff_rate):
+                return self._sized_bet(legal, value=False, pressure=pressure, pot=pot, bb_size=bb_size, street=street, wetness=texture["wetness"])
 
         # Standard check/call/fold resolution
         call_cut = max(0.20, pot_odds * (0.95 - 0.08 * pressure))
@@ -368,9 +392,11 @@ class StrategyAgent:
         call = float(legal.get("call", 0) or 0)
         bb_size = float(obs.get("big_blind", 200) or 200)
         is_opening = call <= bb_size * 1.05 and pot <= 3.5 * bb_size
+        ctx = obs.get("context") or {}
+        table_strength = float(ctx.get("table_strength", 0.0) or 0.0)
 
         # Position analysis
-        _pos_tag, pos_mult, is_steal = self._preflop_position_factor(obs)
+        pos_tag, pos_mult, is_steal = self._preflop_position_factor(obs)
 
         # Short-stack Push/Fold logic (ICM / shallow stack <= 12 BB)
         hero_stack = float(obs.get("stack", 0) or 0)
@@ -388,10 +414,29 @@ class StrategyAgent:
         )
         is_squeeze = (not is_opening) and callers >= 1
 
+        # Position-aware baseline open target
+        pos_open_map = {
+            "utg": self.params.open_thresh_utg,
+            "mp": self.params.open_thresh_hj,
+            "hj": self.params.open_thresh_hj,
+            "co": self.params.open_thresh_co,
+            "btn": self.params.open_thresh_btn,
+            "sb": self.params.open_thresh_sb,
+            "bb": self.params.defend_thresh_bb,
+            "early": self.params.open_thresh_utg,
+            "late": self.params.open_thresh_btn,
+        }
+        vpip_target = self.params.vpip * (0.75 + 0.45 * pos_mult)
+        base_pos_thresh = pos_open_map.get(pos_tag, self.params.open_thresh_hj)
+
+        if is_steal:
+            steal_target = self.params.steal_frequency * 0.55
+            base_pos_thresh = max(base_pos_thresh, steal_target)
+
         if effective_bb <= 12.0:
-            # Short-stack push/fold: the genome's VPIP sets how wide the shove is.
-            push_vpip = (0.18 + self.params.vpip * 0.6) - 0.10 * pressure + (0.10 if is_steal else 0.0)
-            push_vpip = max(0.05, min(0.75, push_vpip))
+            # Short-stack push/fold: position threshold and pressure drive shove width
+            push_vpip = (base_pos_thresh * 1.15 + self.params.vpip * 0.35) - 0.10 * pressure + (0.08 if is_steal else 0.0)
+            push_vpip = max(0.06, min(0.85, push_vpip))
             if premium or score >= 1.0 - push_vpip:
                 if "allIn" in legal:
                     return {"type": "allIn"}
@@ -404,44 +449,81 @@ class StrategyAgent:
             elif "fold" in legal:
                 return {"type": "fold"}
 
-        # A VPIP target is a percentile bar: play the top `vpip` fraction of hands,
-        # loosened by position and tightened by tournament pressure.
-        vpip_target = self.params.vpip * (0.75 + 0.45 * pos_mult)
+        # Dynamic adjustments for position target and vpip target
+        # 1. Table strength adjustment: tough shark table -> tighten; soft table -> widen
+        if table_strength > 0:
+            base_pos_thresh *= (1.0 - self.params.table_strength_weight * 0.25 * table_strength)
+            vpip_target *= (1.0 - self.params.table_strength_weight * 0.25 * table_strength)
+        elif table_strength < 0:
+            base_pos_thresh *= (1.0 + self.params.table_strength_weight * 0.20 * (-table_strength))
+            vpip_target *= (1.0 + self.params.table_strength_weight * 0.20 * (-table_strength))
+
+        # 2. Tournament pressure adjustment: trailing -> widen; leading -> tighten
+        base_pos_thresh *= (1.0 - 0.20 * max(0.0, -pressure)) * (1.0 + 0.18 * max(0.0, pressure))
         vpip_target *= (1.0 - 0.25 * max(0.0, pressure)) * (1.0 + 0.20 * max(0.0, -pressure))
+
+        # 3. Opponent profile adjustment
         if villain.get("is_station"):
-            vpip_target *= 0.90   # stations never fold, so speculative hands lose value
+            base_pos_thresh *= 0.90
+            vpip_target *= 0.90
         elif villain.get("is_nit") or villain.get("fold", 0.52) > 0.58:
-            vpip_target *= 1.10   # opponents over-fold: entering wider is cheap
+            base_pos_thresh *= 1.10
+            vpip_target *= 1.10
+
         vpip_target = max(0.03, min(0.95, vpip_target))
+        open_target = max(0.06, min(0.92, base_pos_thresh))
         in_range = premium or score >= 1.0 - vpip_target
+        in_open_range = premium or score >= 1.0 - open_target
 
-        # "bet" is the opening wager when there is nothing to call (e.g. the big blind's
-        # option), so an opening raise must be offered for either key.
-        if "raise" in legal or "bet" in legal:
-            if is_opening:
-                freq = self.params.open_frequency
-            elif is_squeeze:
-                freq = self.params.squeeze_frequency
-            else:
-                freq = self.params.threebet_frequency
-            freq *= pos_mult
-            if is_steal:
-                steal_freq = self.params.steal_frequency
+        if is_opening:
+            if in_open_range and ("raise" in legal or "bet" in legal):
+                freq = self.params.steal_frequency if is_steal else self.params.open_frequency
                 if villain.get("fold", 0.52) > 0.58:
-                    steal_freq = min(0.95, steal_freq * 1.25)
+                    freq = min(0.98, freq * 1.25)
                 elif villain.get("is_station"):
-                    steal_freq *= 0.80
-                freq = max(freq, steal_freq)
-            if premium:
-                self._hero_is_aggressor = True
-                return self._preflop_raise(legal, premium=True, bb_size=bb_size)
-            if in_range and self._noise(freq * (1.0 + 0.4 * pressure)):
-                self._hero_is_aggressor = True
-                return self._preflop_raise(legal, premium=False, bb_size=bb_size)
+                    freq *= 0.85
+                is_core = premium or score >= 1.0 - open_target * 0.85
+                if is_core or self._noise(freq):
+                    self._hero_is_aggressor = True
+                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size)
+            if in_range and "call" in legal:
+                if pos_tag == "sb" or (call <= bb_size * 1.05 and self._noise(0.90)):
+                    return {"type": "call"}
+            if call == 0 and "check" in legal:
+                return {"type": "check"}
+            if "fold" in legal and not in_range:
+                return {"type": "fold"}
+        else:
+            # Facing an open raise or 3-bet
+            if pos_tag == "bb":
+                defend_target = max(0.15, min(0.90, self.params.defend_thresh_bb * (1.0 - 0.15 * max(0.0, -pressure))))
+                in_defend = in_range or score >= 1.0 - defend_target
+            else:
+                in_defend = in_range
 
-        if "call" in legal:
-            if in_range and (self._noise(0.92) or premium):
-                return {"type": "call"}
+            if "raise" in legal or "bet" in legal:
+                freq = self.params.squeeze_frequency if is_squeeze else self.params.threebet_frequency
+                freq *= pos_mult
+                if villain.get("fold", 0.52) > 0.58:
+                    freq *= 1.25
+                elif villain.get("is_station"):
+                    freq *= 0.80
+
+                if premium:
+                    self._hero_is_aggressor = True
+                    return self._preflop_raise(legal, premium=True, bb_size=bb_size)
+                if in_defend and self._noise(freq * (1.0 + 0.35 * max(0.0, pressure))):
+                    self._hero_is_aggressor = True
+                    return self._preflop_raise(legal, premium=False, bb_size=bb_size)
+
+            if "call" in legal:
+                if in_defend and (self._noise(0.90) or premium):
+                    return {"type": "call"}
+
+            if "check" in legal:
+                return {"type": "check"}
+            if "fold" in legal:
+                return {"type": "fold"}
 
         if "check" in legal:
             return {"type": "check"}
@@ -491,6 +573,7 @@ class StrategyAgent:
         bb = ctx.get("bb100")
         rem = ctx.get("hands_remaining")
         round_no = ctx.get("round_no")
+        table_strength = float(ctx.get("table_strength", 0.0) or 0.0)
         if rank is None:
             return 0.0
 
@@ -502,7 +585,7 @@ class StrategyAgent:
             if rank <= 3:
                 r4 = ctx.get("rank4_bb100")
                 if r4 is not None and bb is not None and (float(bb) - float(r4)) > 15.0 and rem_val <= 8:
-                    pressure -= self.params.safety * 0.4
+                    pressure -= self.params.safety * 0.5
                 else:
                     pressure += 0.05
             else:
@@ -518,7 +601,7 @@ class StrategyAgent:
                 # Leading the final table: maintain pressure without reckless punting
                 r2 = ctx.get("rank2_bb100") or ctx.get("second_bb100")
                 if r2 is not None and bb is not None and (float(bb) - float(r2)) > 20.0 and rem_val <= 8:
-                    pressure -= self.params.safety * 0.4
+                    pressure -= self.params.safety * 0.5
                 else:
                     pressure += 0.10
             else:
@@ -532,21 +615,36 @@ class StrategyAgent:
 
         # Preliminary stage (Rounds 1-10: 200 hands, Top 12 qualify)
         if r12 is not None and bb is not None:
-            gap = float(bb) - float(r12)
-            if rank <= 12 and gap > 1.5:
-                pressure -= self.params.safety
-            elif rank >= 13 or gap < 0:
-                pressure += self.params.attack
-        if r13 is not None and bb is not None and rank <= 12 and float(bb) < float(r13) + 0.5:
-            pressure += 0.10
-        if rem_val <= 20:
-            # On the bubble (straddling the qualification line) how hard to press is
-            # a trait the genome chooses via bubble_aggression, not a constant.
-            if 10 <= rank <= 15:
-                pressure += (self.params.bubble_aggression - 0.5) * 0.6
-            pressure += self.params.late_aggression if rank >= 13 else -0.05
+            # Continuous Qualification Margin: M = (bb - r12) / (sigma * sqrt(H_rem / 200))
+            sd_margin = max(3.0, 30.0 * math.sqrt(max(5, rem_val) / 200.0))
+            margin = (float(bb) - float(r12)) / sd_margin
+
+            if rank <= 12 and margin > 1.0:
+                # Safely inside qualification zone: smooth safety shift to protect stack
+                safety_shift = self.params.safety * min(1.0, 0.45 * margin)
+                pressure -= safety_shift
+            elif rank >= 13 or margin < -0.3:
+                # Outside qualification zone: smooth urgency shifter
+                urgency = self.params.attack * min(1.0, 0.40 * (abs(margin) + 0.5))
+                pressure += urgency
+
+        # On the bubble (ranks 9..20)
+        if rem_val <= 40 and 9 <= rank <= 20:
+            pressure += (self.params.bubble_aggression - 0.5) * 0.6
+
+        if rem_val <= 20 and rank >= 13:
+            pressure += self.params.late_aggression
+
+        # Table strength modulation
+        if table_strength != 0.0:
+            if rank <= 12:
+                pressure -= self.params.table_strength_weight * 0.25 * table_strength
+            else:
+                pressure += self.params.table_strength_weight * 0.15 * max(0.0, table_strength)
+
         if rem_val <= 10:
             pressure *= 1.20
+
         return max(-1.0, min(1.0, pressure))
 
     def _should_aggress(self, base: float, pressure: float, strength: float) -> bool:
@@ -609,9 +707,13 @@ class StrategyAgent:
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _noise(self, probability: float) -> bool:
+        if probability <= 0.0:
+            return False
+        if probability >= 1.0:
+            return True
         t = max(0.0, min(1.0, self.params.temperature))
-        probability = probability * (1 - t) + 0.5 * t
-        return self.rng.random() < probability
+        p = probability * (1 - t) + 0.5 * t
+        return self.rng.random() < p
 
     def _board_texture(self, board: list[Any]) -> dict[str, float]:
         ranks = [c.rank for c in board]

@@ -8,12 +8,62 @@ from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
 
 ARCHETYPES = {
-    "nit": StrategyParams(vpip=.14, open_frequency=.50, threebet_frequency=.055, squeeze_frequency=.035, steal_frequency=.58, cbet_frequency=.55, turn_barrel_frequency=.42, river_bluff_frequency=.035, value_threshold=.72, thin_value_threshold=.64, raise_threshold=.66, jam_threshold=.94, flop_value_threshold=.64, turn_value_threshold=.70, river_value_threshold=.78, open_size=2.20, cbet_size=.42, value_bet_size=.72, bluff_bet_size=.46, raise_size=.62, dry_board_bet_size=.28, wet_board_bet_size=.70, safety=.60, attack=.48, bubble_aggression=.52, late_aggression=.10, temperature=.05),
-    "tight": StrategyParams(vpip=.18, open_frequency=.58, threebet_frequency=.070, squeeze_frequency=.045, steal_frequency=.65, cbet_frequency=.60, turn_barrel_frequency=.50, river_bluff_frequency=.055, value_threshold=.70, thin_value_threshold=.62, raise_threshold=.64, jam_threshold=.93, flop_value_threshold=.60, turn_value_threshold=.66, river_value_threshold=.75, open_size=2.30, cbet_size=.45, value_bet_size=.71, bluff_bet_size=.50, raise_size=.65, dry_board_bet_size=.30, wet_board_bet_size=.72, safety=.52, attack=.56, bubble_aggression=.62, late_aggression=.14, temperature=.06),
+    "nit": StrategyParams(
+        vpip=.14, open_frequency=.50, threebet_frequency=.055, squeeze_frequency=.035, steal_frequency=.58,
+        open_thresh_utg=.11, open_thresh_hj=.14, open_thresh_co=.20, open_thresh_btn=.36, open_thresh_sb=.26, defend_thresh_bb=.40,
+        multiway_decay=.42, table_strength_weight=.35,
+        cbet_frequency=.55, turn_barrel_frequency=.42, river_bluff_frequency=.035,
+        value_threshold=.72, thin_value_threshold=.64, raise_threshold=.66, jam_threshold=.94,
+        flop_value_threshold=.64, turn_value_threshold=.70, river_value_threshold=.78,
+        open_size=2.20, cbet_size=.42, value_bet_size=.72, bluff_bet_size=.46, raise_size=.62,
+        dry_board_bet_size=.28, wet_board_bet_size=.70, safety=.60, attack=.48,
+        bubble_aggression=.52, late_aggression=.10, temperature=.05
+    ),
+    "tight": StrategyParams(
+        vpip=.18, open_frequency=.58, threebet_frequency=.070, squeeze_frequency=.045, steal_frequency=.65,
+        open_thresh_utg=.13, open_thresh_hj=.17, open_thresh_co=.24, open_thresh_btn=.42, open_thresh_sb=.32, defend_thresh_bb=.48,
+        multiway_decay=.48, table_strength_weight=.32,
+        cbet_frequency=.60, turn_barrel_frequency=.50, river_bluff_frequency=.055,
+        value_threshold=.70, thin_value_threshold=.62, raise_threshold=.64, jam_threshold=.93,
+        flop_value_threshold=.60, turn_value_threshold=.66, river_value_threshold=.75,
+        open_size=2.30, cbet_size=.45, value_bet_size=.71, bluff_bet_size=.50, raise_size=.65,
+        dry_board_bet_size=.30, wet_board_bet_size=.72, safety=.52, attack=.56,
+        bubble_aggression=.62, late_aggression=.14, temperature=.06
+    ),
     "balanced": StrategyParams(),
-    "lag": StrategyParams(vpip=.31, open_frequency=.72, threebet_frequency=.105, squeeze_frequency=.075, steal_frequency=.82, cbet_frequency=.69, turn_barrel_frequency=.61, river_bluff_frequency=.11, value_threshold=.61, thin_value_threshold=.54, raise_threshold=.57, jam_threshold=.87, flop_value_threshold=.52, turn_value_threshold=.60, river_value_threshold=.69, open_size=2.40, cbet_size=.50, value_bet_size=.67, bluff_bet_size=.58, raise_size=.73, dry_board_bet_size=.36, wet_board_bet_size=.80, safety=.38, attack=.82, bubble_aggression=.88, late_aggression=.30, temperature=.13),
-    "station": StrategyParams(vpip=.43, open_frequency=.47, threebet_frequency=.040, squeeze_frequency=.025, steal_frequency=.55, cbet_frequency=.43, turn_barrel_frequency=.33, river_bluff_frequency=.020, value_threshold=.64, thin_value_threshold=.56, raise_threshold=.69, jam_threshold=.95, flop_value_threshold=.56, turn_value_threshold=.62, river_value_threshold=.70, open_size=2.25, cbet_size=.41, value_bet_size=.74, bluff_bet_size=.42, raise_size=.56, dry_board_bet_size=.32, wet_board_bet_size=.74, safety=.42, attack=.55, bubble_aggression=.58, late_aggression=.12, temperature=.03),
-    "maniac": StrategyParams(vpip=.48, open_frequency=.83, threebet_frequency=.145, squeeze_frequency=.110, steal_frequency=.90, cbet_frequency=.77, turn_barrel_frequency=.72, river_bluff_frequency=.18, value_threshold=.54, thin_value_threshold=.50, raise_threshold=.50, jam_threshold=.80, flop_value_threshold=.48, turn_value_threshold=.55, river_value_threshold=.63, open_size=2.55, cbet_size=.56, value_bet_size=.62, bluff_bet_size=.64, raise_size=.82, dry_board_bet_size=.42, wet_board_bet_size=.88, safety=.72, attack=.96, bubble_aggression=.98, late_aggression=.42, temperature=.18),
+    "lag": StrategyParams(
+        vpip=.31, open_frequency=.72, threebet_frequency=.105, squeeze_frequency=.075, steal_frequency=.82,
+        open_thresh_utg=.17, open_thresh_hj=.22, open_thresh_co=.31, open_thresh_btn=.56, open_thresh_sb=.42, defend_thresh_bb=.58,
+        multiway_decay=.52, table_strength_weight=.28,
+        cbet_frequency=.69, turn_barrel_frequency=.61, river_bluff_frequency=.11,
+        value_threshold=.61, thin_value_threshold=.54, raise_threshold=.57, jam_threshold=.87,
+        flop_value_threshold=.52, turn_value_threshold=.60, river_value_threshold=.69,
+        open_size=2.40, cbet_size=.50, value_bet_size=.67, bluff_bet_size=.58, raise_size=.73,
+        dry_board_bet_size=.36, wet_board_bet_size=.80, safety=.38, attack=.82,
+        bubble_aggression=.88, late_aggression=.30, temperature=.13
+    ),
+    "station": StrategyParams(
+        vpip=.43, open_frequency=.47, threebet_frequency=.040, squeeze_frequency=.025, steal_frequency=.55,
+        open_thresh_utg=.18, open_thresh_hj=.23, open_thresh_co=.28, open_thresh_btn=.46, open_thresh_sb=.38, defend_thresh_bb=.65,
+        multiway_decay=.58, table_strength_weight=.20,
+        cbet_frequency=.43, turn_barrel_frequency=.33, river_bluff_frequency=.020,
+        value_threshold=.64, thin_value_threshold=.56, raise_threshold=.69, jam_threshold=.95,
+        flop_value_threshold=.56, turn_value_threshold=.62, river_value_threshold=.70,
+        open_size=2.25, cbet_size=.41, value_bet_size=.74, bluff_bet_size=.42, raise_size=.56,
+        dry_board_bet_size=.32, wet_board_bet_size=.74, safety=.42, attack=.55,
+        bubble_aggression=.58, late_aggression=.12, temperature=.03
+    ),
+    "maniac": StrategyParams(
+        vpip=.48, open_frequency=.83, threebet_frequency=.145, squeeze_frequency=.110, steal_frequency=.90,
+        open_thresh_utg=.22, open_thresh_hj=.27, open_thresh_co=.36, open_thresh_btn=.62, open_thresh_sb=.46, defend_thresh_bb=.62,
+        multiway_decay=.65, table_strength_weight=.15,
+        cbet_frequency=.77, turn_barrel_frequency=.72, river_bluff_frequency=.18,
+        value_threshold=.54, thin_value_threshold=.50, raise_threshold=.50, jam_threshold=.80,
+        flop_value_threshold=.48, turn_value_threshold=.55, river_value_threshold=.63,
+        open_size=2.55, cbet_size=.56, value_bet_size=.62, bluff_bet_size=.64, raise_size=.82,
+        dry_board_bet_size=.42, wet_board_bet_size=.88, safety=.72, attack=.96,
+        bubble_aggression=.98, late_aggression=.42, temperature=.18
+    ),
 }
 
 def _load_params_safe(raw: Any) -> StrategyParams:
@@ -29,21 +79,21 @@ def _load_params_safe(raw: Any) -> StrategyParams:
 def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
     """Aggregate per-run outcomes into fitness plus its own uncertainty.
 
-    Championship-first weighting:
-    - 45% champion rate
-    - 25% final table rate
+    Balanced championship & chip-accumulation weighting:
+    - 25% champion rate (down from 45% to suppress coinflip variance)
+    - 20% final table rate
     - 20% top 12 qualification rate
     - 5% normalized rank
-    - 5% normalized BB/100 (rewards positive profit, penalizes blind bleeding)
+    - 30% normalized BB/100 (raised from 5% to strongly reward steady chip accumulation)
     """
     runs = max(1, runs)
     top_rate, final_rate, champ_rate = top / runs, final / runs, champ / runs
     avg_rank = sum(ranks) / runs
     avg_bb = sum(bbs) / runs
     bb_factor = 1.0 / (1.0 + math.exp(-max(-200.0, min(200.0, avg_bb)) / 40.0))
-    fit = (.20 * top_rate + .25 * final_rate + .45 * champ_rate
+    fit = (.20 * top_rate + .20 * final_rate + .25 * champ_rate
            + .05 * (1.0 - min(avg_rank - 1, pool - 1) / (pool - 1))
-           + .05 * bb_factor)
+           + .30 * bb_factor)
 
     def var_prop(p):  # Var of a proportion over `runs` independent tournaments
         return p * (1.0 - p) / runs
@@ -51,13 +101,15 @@ def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
     def cov(p1, p2):  # nested events: P(A and B) = min(p1, p2)
         return (min(p1, p2) - p1 * p2) / runs
 
-    var = (.20 ** 2) * var_prop(top_rate) + (.25 ** 2) * var_prop(final_rate) \
-        + (.45 ** 2) * var_prop(champ_rate) \
-        + 2 * .20 * .25 * cov(top_rate, final_rate) \
-        + 2 * .20 * .45 * cov(top_rate, champ_rate) \
-        + 2 * .25 * .45 * cov(final_rate, champ_rate)
+    var = (.20 ** 2) * var_prop(top_rate) + (.20 ** 2) * var_prop(final_rate) \
+        + (.25 ** 2) * var_prop(champ_rate) \
+        + 2 * .20 * .20 * cov(top_rate, final_rate) \
+        + 2 * .20 * .25 * cov(top_rate, champ_rate) \
+        + 2 * .20 * .25 * cov(final_rate, champ_rate)
     if runs > 1 and len(ranks) > 1:
         var += (.05 / (pool - 1)) ** 2 * (statistics.variance(ranks) / runs)
+    if runs > 1 and len(bbs) > 1:
+        var += (.30 / 160.0) ** 2 * (statistics.variance(bbs) / runs)
     se = math.sqrt(max(0.0, var))
     return {
         "top12_rate": top_rate, "final_rate": final_rate, "champion_rate": champ_rate,
@@ -149,6 +201,16 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
         threebet_frequency=min(0.30, max(0.03, pfr * 0.45)),
         squeeze_frequency=min(0.25, max(0.02, pfr * 0.30)),
         steal_frequency=min(0.95, max(0.30, pfr * 1.5)),
+        # Position-aware preflop ranges
+        open_thresh_utg=num("open_thresh_utg", max(0.10, min(0.22, pfr * 0.95)), 0.10, 0.22),
+        open_thresh_hj=num("open_thresh_hj", max(0.14, min(0.28, pfr * 1.20)), 0.14, 0.28),
+        open_thresh_co=num("open_thresh_co", max(0.20, min(0.38, pfr * 1.70)), 0.20, 0.38),
+        open_thresh_btn=num("open_thresh_btn", max(0.35, min(0.62, pfr * 3.0)), 0.35, 0.62),
+        open_thresh_sb=num("open_thresh_sb", max(0.25, min(0.48, pfr * 2.2)), 0.25, 0.48),
+        defend_thresh_bb=num("defend_thresh_bb", max(0.38, min(0.68, vpip * 1.6)), 0.38, 0.68),
+        # Multiway & Table dynamics
+        multiway_decay=0.40 if is_nit else (0.65 if is_maniac else 0.50),
+        table_strength_weight=num("table_strength_weight", 0.18 if is_maniac else (0.42 if is_nit else 0.30), 0.10, 0.50),
         # Postflop frequencies
         cbet_frequency=min(0.90, max(0.30, 0.45 + af * 0.04)),
         turn_barrel_frequency=min(0.85, max(0.20, 0.40 + af * 0.03)),
@@ -319,9 +381,19 @@ class StrategyTrainer:
         # Preflop (healthy 6-max bounds preventing degenerate ultra-nit collapse)
         "vpip": (0.18, 0.38),
         "open_frequency": (0.45, 0.95),
-        "threebet_frequency": (0.04, 0.22),
-        "squeeze_frequency": (0.03, 0.18),
-        "steal_frequency": (0.60, 0.95),
+        "threebet_frequency": (0.04, 0.14),
+        "squeeze_frequency": (0.03, 0.16),
+        "steal_frequency": (0.55, 0.85),
+        # Position-aware preflop ranges
+        "open_thresh_utg": (0.10, 0.22),
+        "open_thresh_hj": (0.14, 0.28),
+        "open_thresh_co": (0.20, 0.38),
+        "open_thresh_btn": (0.35, 0.62),
+        "open_thresh_sb": (0.25, 0.48),
+        "defend_thresh_bb": (0.38, 0.68),
+        # Multiway & Table dynamics
+        "multiway_decay": (0.30, 0.70),
+        "table_strength_weight": (0.10, 0.50),
         # Postflop frequencies
         "cbet_frequency": (0.40, 0.85),
         "turn_barrel_frequency": (0.25, 0.75),
@@ -363,11 +435,19 @@ class StrategyTrainer:
         d["river_value_threshold"] = max(d["river_value_threshold"], d["turn_value_threshold"] + 0.02)
         d["bluff_bet_size"] = min(d["bluff_bet_size"], d["value_bet_size"])
         d["wet_board_bet_size"] = max(d["wet_board_bet_size"], d["dry_board_bet_size"] + 0.10)
+        # Enforce preflop position hierarchy: UTG <= HJ <= CO <= BTN
+        d["open_thresh_hj"] = max(d["open_thresh_hj"], d["open_thresh_utg"] + 0.02)
+        d["open_thresh_co"] = max(d["open_thresh_co"], d["open_thresh_hj"] + 0.03)
+        d["open_thresh_btn"] = max(d["open_thresh_btn"], d["open_thresh_co"] + 0.05)
+        d["open_thresh_sb"] = max(d["open_thresh_co"] - 0.03, min(d["open_thresh_btn"] - 0.03, d["open_thresh_sb"]))
+        # Tactical coupling constraint: Preflop aggression must be supported by postflop attack
+        if d["threebet_frequency"] >= 0.09:
+            d["attack"] = max(d["attack"], min(0.92, 0.65 + (d["threebet_frequency"] - 0.09) * 2.5))
 
     def mutate(self, p, sigma):
         d = asdict(p)
         for k in self.FIELDS:
-            scale = sigma * (.55 if k in {"value_threshold", "thin_value_threshold", "raise_threshold", "jam_threshold", "flop_value_threshold", "turn_value_threshold", "river_value_threshold"} else .35 if k == "open_size" else 1.0)
+            scale = sigma * (.55 if k in {"value_threshold", "thin_value_threshold", "raise_threshold", "jam_threshold", "flop_value_threshold", "turn_value_threshold", "river_value_threshold", "open_thresh_utg", "open_thresh_hj", "open_thresh_co", "open_thresh_btn", "open_thresh_sb", "defend_thresh_bb"} else .35 if k == "open_size" else 1.0)
             d[k] += self.rng.gauss(0, scale)
         self._clamp_and_validate(d)
         return StrategyParams(**d)
@@ -628,11 +708,19 @@ class StrategyTrainer:
                   f"(in-sample best {in_sample['fitness']:.4f}) [best_ever={best_ever_metrics['fitness']:.4f} 停滞={stagnation_count}/{stagnation_patience}]", flush=True)
             hall.append((champion_metrics["fitness"], champion))
             hall=sorted(hall, key=lambda x:-x[0])[:self.HALL_SIZE]
-            new=elites[:]
-            while len(new)<population:
-                child=self.crossover(self.rng.choice(elites),self.rng.choice(elites)) if self.rng.random()<.65 else self.rng.choice(elites)
-                new.append(self.mutate(child,sigma))
-            pop=new
+            # Strict Elitism: Anchor the all-time peak champion directly into the new generation
+            # so the active population can never wander into degenerate corners.
+            new = [replace(best_ever_champion)] if best_ever_champion is not None else []
+            for p in elites:
+                if len(new) < elite_n + (1 if best_ever_champion is not None else 0):
+                    if not any(asdict(p) == asdict(x) for x in new):
+                        new.append(replace(p))
+            # Breed the rest of the population from a pool that includes the all-time champion
+            parent_pool = [best_ever_champion] + elites if best_ever_champion is not None else elites
+            while len(new) < population:
+                child = self.crossover(self.rng.choice(parent_pool), self.rng.choice(parent_pool)) if self.rng.random() < .65 else self.rng.choice(parent_pool)
+                new.append(self.mutate(child, sigma))
+            pop = new
             (ap/f"gen_{g+1:03d}.json").write_text(json.dumps({"generation":g+1,"champion":asdict(champion),"metrics":champion_metrics},ensure_ascii=False,indent=2),encoding="utf-8")
             sigma_epoch += 1
 
