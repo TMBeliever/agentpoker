@@ -1340,7 +1340,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function toggleRosterDrawer() {
       const mode = document.getElementById("selOppMode").value;
       if (mode === "archetypes") {
-        alert("当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，不挂载真人用户模型。\n如需指定参训用户模型，请将对手池切换为【真人模式】或【混合模式】。");
+        alert(`当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，不挂载真人用户模型。\n如需指定参训用户模型，请将对手池切换为【真人模式】或【混合模式】。`);
         return;
       }
       const drawer = document.getElementById("rosterDrawer");
@@ -1361,7 +1361,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function openRosterModal() {
       const mode = document.getElementById("selOppMode").value;
       if (mode === "archetypes") {
-        alert("当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，不挂载真人用户模型。\n如需指定参训用户模型，请将对手池切换为【真人模式】或【混合模式】。");
+        alert(`当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，不挂载真人用户模型。\n如需指定参训用户模型，请将对手池切换为【真人模式】或【混合模式】。`);
         return;
       }
       const modal = document.getElementById("rosterModal");
@@ -1572,7 +1572,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function selectProfiles(type) {
       const mode = document.getElementById("selOppMode").value;
       if (mode === "archetypes") {
-        alert("当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，无需指定真人用户模型。\n如需指定参训选手画像，请先将对手池切换为【真人模式】或【混合模式】。");
+        alert(`当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，无需指定真人用户模型。\n如需指定参训选手画像，请先将对手池切换为【真人模式】或【混合模式】。`);
         return;
       }
       if (!cachedProfiles || cachedProfiles.length === 0) return;
