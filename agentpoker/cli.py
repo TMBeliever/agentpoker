@@ -190,28 +190,27 @@ def main():
             track = 'targeted' if args.profiles else 'universal'
 
         base_model = args.base_model
+        save_path = args.save or 'models/candidate.json'
+        archive_dir = args.archive or 'models/archive'
+
         if track == 'targeted':
-            save_path = args.save or 'models/champion_targeted.json'
-            archive_dir = args.archive or 'models/archive_targeted'
             profiles_src = args.profiles or 'models/opponent_profiles.json'
             if base_model is None and os.path.exists('models/champion.json'):
                 base_model = 'models/champion.json'
-            print(f"[Train] === 启动【赛场特训收割轨 (Targeted)】===")
+            print(f"[Train] === 启动【赛场特训收割模式】===")
             if base_model:
-                print(f"[Train] 初始底模: {base_model} (基于该模型微调收割画像)")
-            print(f"[Train] 挂载对手画像: {profiles_src} | 模型保存: {save_path} | 归档: {archive_dir}")
+                print(f"[Train] 对比/基线底模: {base_model}")
+            print(f"[Train] 挂载画像: {profiles_src} | 模型保存: {save_path} | 归档: {archive_dir}")
         else:
-            save_path = args.save or 'models/champion_universal.json'
-            archive_dir = args.archive or 'models/archive_universal'
             profiles_src = (args.profiles or 'models/opponent_profiles.json') if args.mix_profiles else None
-            print(f"[Train] === 启动【通用自演化基石轨 (Universal)】===")
+            print(f"[Train] === 启动【自适应演化训练模式】===")
             if base_model:
-                print(f"[Train] 初始底模: {base_model}")
+                print(f"[Train] 对比/基线底模: {base_model}")
             if profiles_src:
                 print(f"[Train] 混练模式: 原型池 + 优质画像 (门槛>={args.profile_min_hands}手, 占比<={args.profile_share:.0%}) | 画像源: {profiles_src}")
             else:
-                print(f"[Train] 纯原型模式 (未启用 --mix-profiles，无真实画像偏见)")
-            print(f"[Train] 模型保存: {save_path} | 归档: {archive_dir}")
+                print(f"[Train] 原型博弈模式 (无真实画像挂载)")
+            print(f"[Train] 候选模型保存: {save_path} | 归档: {archive_dir}")
 
         trainer = StrategyTrainer(
             seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers,
@@ -226,12 +225,9 @@ def main():
                 print(f"[Train] 警告: 通过门槛的画像仅 {n_prof} 位，对手池多样性偏低，建议下调 --profile-min-hands")
         champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume, reeval_runs=args.reeval_runs, base_model=base_model)
         
-        if track == 'universal' and save_path == 'models/champion_universal.json':
-            try:
-                Path('models/champion.json').write_text(Path(save_path).read_text(encoding='utf-8'), encoding='utf-8')
-            except Exception:
-                pass
-        print(f"[Train] 训练完成！已成功保存到 {save_path}")
+        print(f"[Train] 训练完成！候选模型已保存到 {save_path}")
+        print(f"[Train] 提示: 按照生产安全门禁规范，新演化模型必须通过擂台认证门禁后方可晋升为生产冠军:")
+        print(f"       python -m agentpoker.cli battle --models models/champion.json {save_path} --certify --candidate {save_path} --promote")
     elif args.cmd=='evaluate':
         pth=StrategyAgent.load(args.strategy).params
         r=ArenaEvaluator(pool_size=args.agents,equity_samples=args.equity_samples,profiles=args.profiles,workers=args.workers).evaluate(pth,runs=args.runs,seed_offset=9911,verbose=True)

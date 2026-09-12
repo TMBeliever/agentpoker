@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, sys, json, time, signal, subprocess, urllib.parse
+import os, sys, json, time, signal, subprocess, urllib.parse, datetime
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
@@ -54,11 +54,11 @@ class ProcessManager:
         runs = str(params.get("runs", 40))
         agents = str(params.get("agents", 120))
         workers = str(params.get("workers", 2))
-        save_path = params.get("save") or "models/champion_v2.json"
-        archive = params.get("archive") or "models/archive_v2"
+        save_path = params.get("save") or "models/candidate.json"
+        archive = params.get("archive") or "models/archive"
         
         start_mode = params.get("start_mode", "finetune")
-        base_model = params.get("base_model") or "models/champion_optimized.json"
+        base_model = params.get("base_model") or "models/champion.json"
         
         opp_mode = params.get("opp_mode", "mix")
         min_hands = str(params.get("min_hands", 100))
@@ -123,22 +123,34 @@ class ProcessManager:
         self.train_start_time = time.time()
 
         if overwrite_champion:
-            import threading, shutil
+            import threading
             def _watch_and_promote(proc, sp):
                 proc.wait()
                 if proc.returncode == 0:
                     src = ROOT_DIR / sp
                     dst = ROOT_DIR / "models" / "champion.json"
-                    try:
-                        if src.exists() and src.resolve() != dst.resolve():
-                            if dst.exists():
-                                shutil.copy(dst, ROOT_DIR / "models" / "champion.json.bak")
-                            shutil.copy(src, dst)
-                            with open(self.train_log_file, "a", encoding="utf-8") as fl:
-                                fl.write("\n[Dashboard] 🏆 训练胜出！已自动晋升并覆盖主战模型: models/champion.json (原模型已备份为 .bak)\n")
-                    except Exception as e:
-                        with open(self.train_log_file, "a", encoding="utf-8") as fl:
-                            fl.write(f"\n[Dashboard] 警告: 同步主模型失败: {e}\n")
+                    with open(self.train_log_file, "a", encoding="utf-8") as fl:
+                        fl.write(f"\n[Dashboard] 🏁 训练成功完成！产出模型已保存至: {sp}\n")
+                        try:
+                            content = json.loads(src.read_text(encoding="utf-8")) if src.exists() else {}
+                            cert = content.get("certification", {})
+                            if cert.get("certified"):
+                                from agentpoker.battle import ChampionCertificationResult, CertificationCriterion, promote_champion
+                                cert_res = ChampionCertificationResult(
+                                    certified=True,
+                                    candidate_id=cert.get("candidate_id", src.stem),
+                                    candidate_name=cert.get("candidate_name", src.stem),
+                                    criteria=[CertificationCriterion(**c) for c in cert.get("criteria", [])],
+                                    summary=cert.get("summary", ""),
+                                    recommendation=cert.get("recommendation", "PROMOTE_TO_CHAMPION"),
+                                    timestamp=cert.get("timestamp", "")
+                                )
+                                promote_champion(candidate_source=src, target_path=dst, backup=True, certification_result=cert_res)
+                                fl.write(f"[Dashboard] 🏆 模型已通过认证并安全晋升为主战模型: {dst}\n")
+                            else:
+                                fl.write("[Dashboard] ⚠️ [Gate 4 认证保护] 新产出模型为训练演化检查点。根据 V2.2 生产级规范，必须通过 120 人官方认证评估 (python -m agentpoker.cli battle --certify --promote) 验证 5 项金标后方可晋升为 champion.json，已阻止未认证直接覆盖。\n")
+                        except Exception as e:
+                            fl.write(f"[Dashboard] 警告: 自动晋升检查失败: {e}\n")
             threading.Thread(target=_watch_and_promote, args=(self.train_proc, save_path), daemon=True).start()
 
         return {"status": "success", "message": f"训练已成功启动 (PID: {self.train_proc.pid})"}
@@ -163,7 +175,7 @@ class ProcessManager:
 
         return {"status": "success", "message": "训练已终止" if stopped else "没有运行中的训练"}
 
-    def start_live(self, strategy: str = "models/champion_optimized.json") -> dict[str, Any]:
+    def start_live(self, strategy: str = "models/champion.json") -> dict[str, Any]:
         if self.is_live():
             return {"status": "error", "message": "比赛已在进行中"}
         
@@ -221,7 +233,7 @@ pm = ProcessManager()
 
 def get_archive_data() -> list[dict[str, Any]]:
     # Find active archive
-    candidates = ["models/archive_v2", "models/archive_targeted", "models/archive_optimized", "models/archive_universal"]
+    candidates = ["models/archive", "models/archive_v2"]
     archive_dir = None
     for c in candidates:
         p = ROOT_DIR / c
@@ -237,7 +249,7 @@ def get_archive_data() -> list[dict[str, Any]]:
             d = json.loads(gf.read_text(encoding="utf-8"))
             gen_no = d.get("generation")
             m = d.get("metrics") or d.get("training_metrics") or {}
-            p = d.get("champion") or d.get("params") or {}
+            p = d.get("parameters") or d.get("champion") or d.get("params") or {}
             results.append({
                 "generation": gen_no,
                 "fitness": round(float(m.get("fitness", 0)), 4),
@@ -265,7 +277,7 @@ def get_models_list() -> list[str]:
         for p in sorted(models_dir.glob("*.json")):
             if "profile" not in p.name and not p.name.startswith("."):
                 out.append(f"models/{p.name}")
-    return out or ["models/champion_optimized.json"]
+    return out or ["models/champion.json"]
 
 def get_models_details() -> list[dict[str, Any]]:
     models_dir = ROOT_DIR / "models"
@@ -285,7 +297,11 @@ def get_models_details() -> list[dict[str, Any]]:
             if not m and history:
                 m = history[-1].get("metrics") or {}
             
-            params = d.get("champion") or d.get("params") or {}
+            cert = d.get("certification") or {}
+            is_certified = bool(cert.get("certified", False))
+            cert_summary = cert.get("summary", "")
+            
+            params = d.get("parameters") or d.get("champion") or d.get("params") or {}
             vpip = float(params.get("vpip", 0.15))
             open_freq = float(params.get("open_frequency", 0.5))
             threebet_freq = float(params.get("threebet_frequency", 0.05))
@@ -307,6 +323,39 @@ def get_models_details() -> list[dict[str, Any]]:
             avg_bb100 = round(float(m.get("avg_bb100", 0.0)), 1)
             avg_rank = round(float(m.get("avg_rank", 18.0)), 1)
             gen = int(d.get("generation") or (history[-1].get("generation") if history else 0))
+
+            if not m and cert:
+                for crit in cert.get("criteria", []):
+                    act = crit.get("actual", "")
+                    detail = crit.get("detail", "")
+                    cname = crit.get("name", "")
+                    if "Top 12" in cname:
+                        try:
+                            top12_rate = float(act.split("%")[0].strip())
+                        except Exception:
+                            pass
+                    elif "Title" in cname or "Deep Run" in cname:
+                        try:
+                            if "Final" in act:
+                                final_rate = float(act.split("Final")[1].split("%")[0].strip())
+                            if "Champ" in act:
+                                champion_rate = float(act.split("Champ")[1].split("%")[0].strip())
+                        except Exception:
+                            pass
+                    elif "BB/100" in cname:
+                        try:
+                            clean_bb = act.replace("+", "").replace("BB/100", "").strip()
+                            avg_bb100 = round(float(clean_bb), 1)
+                        except Exception:
+                            pass
+                    elif "Rank" in cname:
+                        try:
+                            if "#1" in act:
+                                avg_rank = 1.0
+                            if "Score:" in detail:
+                                fitness = round(float(detail.split("Score:")[1].replace(")", "").strip()), 2)
+                        except Exception:
+                            pass
 
             if vpip < 0.07:
                 archetype = "🛡️ 极紧反剥削 (Ultra-Nit)"
@@ -353,7 +402,10 @@ def get_models_details() -> list[dict[str, Any]]:
                 "name": p.name,
                 "path": f"models/{p.name}",
                 "is_main": (p.name == "champion.json"),
-                "version": d.get("version", "2.0"),
+                "is_certified": is_certified,
+                "cert_summary": cert_summary,
+                "schema_version": d.get("schema_version", 1),
+                "version": d.get("model_version") or d.get("version", "2.0"),
                 "size_kb": size_kb,
                 "mtime": mtime_str,
                 "generation": gen,
@@ -429,11 +481,41 @@ def promote_model(model_rel_path: str) -> dict[str, Any]:
         return {"status": "error", "message": "该模型已经是当前主战模型"}
     
     try:
-        import shutil
-        if dst.exists():
-            shutil.copy(dst, ROOT_DIR / "models" / "champion.json.bak")
-        shutil.copy(target, dst)
-        return {"status": "success", "message": f"🏆 已成功将 {target.name} 设为当前主战模型 (champion.json)！原主模型已自动备份为 .bak"}
+        content = json.loads(target.read_text(encoding="utf-8"))
+        cert = content.get("certification", {})
+        if not cert or not cert.get("certified"):
+            return {
+                "status": "error",
+                "message": (
+                    f"❌ 【Gate 4 认证拦截】模型 {target.name} 尚未通过 120 人官方生产级认证！\n"
+                    "根据系统规范，未认证模型禁止直接晋升为主战模型。\n"
+                    "请在终端运行: python -m agentpoker.cli battle --certify --promote\n"
+                    "通过 120 人对抗与 5 项严苛指标考核后方可安全晋升。"
+                )
+            }
+        
+        from agentpoker.battle import ChampionCertificationResult, CertificationCriterion, promote_champion
+        criteria_objs = [
+            CertificationCriterion(
+                name=c.get("name", ""),
+                required=c.get("required", ""),
+                actual=c.get("actual", ""),
+                passed=c.get("passed", False),
+                detail=c.get("detail", "")
+            )
+            for c in cert.get("criteria", [])
+        ]
+        cert_res = ChampionCertificationResult(
+            certified=True,
+            candidate_id=cert.get("candidate_id", target.stem),
+            candidate_name=cert.get("candidate_name", target.stem),
+            criteria=criteria_objs,
+            summary=cert.get("summary", "Certified via battle"),
+            recommendation=cert.get("recommendation", "PROMOTE_TO_CHAMPION"),
+            timestamp=cert.get("timestamp", datetime.datetime.now().isoformat())
+        )
+        promote_champion(candidate_source=target, target_path=dst, backup=True, certification_result=cert_res)
+        return {"status": "success", "message": f"🏆 已安全晋升 {target.name} 为当前主战模型 (champion.json)！原模型已生成时间戳备份。"}
     except Exception as e:
         return {"status": "error", "message": f"设为主战模型失败: {e}"}
 
@@ -535,7 +617,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgentPoker 2.0 全能可视化控制台</title>
+  <title>AgentPoker V2.2 全能可视化控制台</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -560,9 +642,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
       <div>
         <h1 class="text-xl font-bold text-white tracking-wide flex items-center gap-2">
-          AgentPoker <span class="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">2.0 PRO</span>
+          AgentPoker <span class="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">V2.2 TOURNAMENT READY</span>
         </h1>
-        <p class="text-xs text-slate-400">德州扑克自适应博弈训练引擎 & 实战云控中心</p>
+        <p class="text-xs text-slate-400">德州扑克自适应博弈训练引擎 & 120人实战云控中心</p>
       </div>
     </div>
     <!-- Quick Status Bar -->
@@ -754,11 +836,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="block text-slate-400 mb-1">产出模型文件</label>
-                <input type="text" id="inpSavePath" value="models/champion_v2.json" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-[11px]">
+                <input type="text" id="inpSavePath" value="models/candidate.json" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-[11px]">
               </div>
               <div>
                 <label class="block text-slate-400 mb-1">归档目录</label>
-                <input type="text" id="inpArchiveDir" value="models/archive_v2" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-[11px]">
+                <input type="text" id="inpArchiveDir" value="models/archive" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-[11px]">
               </div>
             </div>
             <div class="flex items-start space-x-2 pt-1">
@@ -1131,12 +1213,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         list.forEach(m => {
           const opt1 = document.createElement("option");
           opt1.value = m; opt1.innerText = m;
-          if (m.includes("champion_optimized")) opt1.selected = true;
+          if (m === "models/champion.json" || m.endsWith("/champion.json")) opt1.selected = true;
           sel1.appendChild(opt1);
 
           const opt2 = document.createElement("option");
           opt2.value = m; opt2.innerText = m;
-          if (m.includes("champion_optimized") || m.includes("champion_v2")) opt2.selected = true;
+          if (m === "models/champion.json" || m.endsWith("/champion.json")) opt2.selected = true;
           sel2.appendChild(opt2);
         });
       } catch (e) {}
@@ -1666,13 +1748,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-crown text-amber-400"></i> 当前主战模型 (Active)</span>`
           : "";
 
+        const certBadge = m.is_certified
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-sm" title="通过 120 人全环境官方 Gate 4/5 认证"><i class="fa-solid fa-certificate text-emerald-400"></i> 官方认证通过</span>`
+          : `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1" title="未经 120 人官方认证，受 Gate 4 保护"><i class="fa-solid fa-flask text-slate-500"></i> 未认证候选</span>`;
+
         const deleteBtn = m.is_main
           ? `<span class="text-[10px] text-slate-500 px-2 py-1 rounded bg-slate-950 border border-slate-800 flex items-center gap-1" title="主战模型受保护，不可删除"><i class="fa-solid fa-shield-halved text-amber-400/80"></i> 主模型保护中</span>`
           : `<button onclick="deleteModel('${m.path}', '${m.name}')" class="text-xs px-2.5 py-1 rounded bg-red-950/60 border border-red-800 hover:bg-red-900 text-red-300 transition flex items-center gap-1 shadow" title="彻底删除模型"><i class="fa-solid fa-trash-can"></i> 删除</button>`;
 
         const promoteBtn = m.is_main
           ? `<div class="text-xs font-semibold text-amber-400 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-amber-950/40 border border-amber-800/60 flex-1"><i class="fa-solid fa-check"></i> 当前默认实战主模</div>`
-          : `<button onclick="promoteModel('${m.path}', '${m.name}')" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white flex items-center justify-center gap-1.5 transition shadow"><i class="fa-solid fa-crown"></i> 设为当前主战模型</button>`;
+          : (m.is_certified
+            ? `<button onclick="promoteModel('${m.path}', '${m.name}')" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white flex items-center justify-center gap-1.5 transition shadow"><i class="fa-solid fa-crown"></i> 设为当前主战模型</button>`
+            : `<button onclick="promoteModel('${m.path}', '${m.name}')" class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center gap-1.5 transition shadow" title="未通过 Gate 4 认证的模型晋升将被安全拦截"><i class="fa-solid fa-shield-halved text-amber-400"></i> 设为主战 (需 Gate 4)</button>`
+          );
 
         const strengthsBadges = m.strengths.map(s => 
           `<span class="text-[10px] px-2 py-0.5 rounded bg-slate-900/90 text-amber-300/90 border border-slate-800">${s}</span>`
@@ -1690,6 +1779,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                   <div class="flex items-center flex-wrap gap-2">
                     <span class="font-bold text-white text-base font-mono">${m.name}</span>
                     ${mainBadge}
+                    ${certBadge}
                     <span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">Gen ${m.generation}</span>
                     <span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800">v${m.version}</span>
                   </div>
@@ -1714,6 +1804,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <div class="flex flex-wrap gap-1.5 pt-1">
                   ${strengthsBadges}
                 </div>
+                ${m.cert_summary ? `
+                <div class="mt-2 text-[10px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-800/50 p-2 rounded-lg flex items-start gap-1.5">
+                  <i class="fa-solid fa-circle-check text-emerald-400 mt-0.5 shrink-0 text-xs"></i>
+                  <span class="leading-relaxed font-mono">${m.cert_summary}</span>
+                </div>` : ''}
               </div>
 
               <!-- 4项核心胜率与收益指标卡片 -->
@@ -2080,7 +2175,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._send_json(pm.stop_training())
             return
         if path == "/api/live/start":
-            strategy = params.get("strategy", "models/champion_optimized.json")
+            strategy = params.get("strategy", "models/champion.json")
             self._send_json(pm.start_live(strategy))
             return
         if path == "/api/live/stop":

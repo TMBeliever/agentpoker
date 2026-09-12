@@ -105,18 +105,14 @@ def discover_candidates(
                 for p in sorted(sub_dir.glob("*.json"), reverse=True):
                     model_files.append(p)
 
-    # Priority sorting: champion files first, then gen_xxx
+    # Priority sorting: champion.json first, then other models, then archives
     def model_sort_key(p: Path):
         name = p.name
-        if name == "champion_optimized.json":
-            return (0, name)
-        if name == "champion_secondary.json":
-            return (1, name)
         if name == "champion.json":
-            return (2, name)
+            return (0, name)
         if "champion" in name:
-            return (3, name)
-        return (4, str(p))
+            return (1, name)
+        return (2, str(p))
 
     model_files.sort(key=model_sort_key)
 
@@ -131,17 +127,11 @@ def discover_candidates(
             pfr_str = f"PFR {agent.params.open_frequency * 0.7:.1%}"
             desc = f"演化模型 ({vpip_str}, {pfr_str})"
             if p.name == "champion.json":
-                desc += " [原始主力冠军模型]"
-            elif p.name == "champion_optimized.json":
-                desc += " [新版夺冠优化冠军]"
-            elif p.name == "champion_secondary.json":
-                desc += " [次主力模型 (Universal Gen 5)]"
-            elif "optimized" in str(p):
-                desc += " [夺冠优化演化轨]"
-            elif "universal" in str(p):
-                desc += " [通用自演化基石轨]"
-            elif "targeted" in str(p):
-                desc += " [赛场特训收割轨]"
+                desc += " [官方生产冠军模型 (Production Champion)]"
+            elif "candidate" in str(p) or "champion" in p.name:
+                desc += " [候选冠军模型]"
+            elif "archive" in str(p):
+                desc += f" [历史归档代数 {p.stem}]"
 
             clean_rel = str(p.relative_to(models_path)).replace("/", "_").replace(".json", "")
             cid = f"model:{clean_rel}"
