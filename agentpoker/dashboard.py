@@ -84,7 +84,7 @@ class ProcessManager:
         else: # scratch
             cmd.extend(["--no-resume"])
 
-        selected_profiles = params.get("selected_profiles")
+        selected_profiles = params.get("selected_profiles") if opp_mode in ("pure_human", "mix") else None
         profiles_file = "models/opponent_profiles.json"
         if selected_profiles and isinstance(selected_profiles, list) and len(selected_profiles) > 0:
             full_p = ROOT_DIR / "models" / "opponent_profiles.json"
@@ -737,19 +737,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <!-- 2. 对手池与真人画像配置 -->
           <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 space-y-2 text-xs">
             <div>
-              <label class="block text-slate-400 mb-1 font-medium">对抗对手池来源 (是否纯真人)</label>
-              <select id="selOppMode" onchange="updateEstimates();" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
-                <option value="mix">🛡️ 混合实战池 (50% 真实画像 + 50% 经典原型)</option>
-                <option value="pure_human">🎯 赛场纯真人画像 (100% 真实玩家特训收割)</option>
-                <option value="archetypes">⚖️ 纯经典原型池 (0% 真人，纳什博弈自演化)</option>
+              <label class="block text-slate-400 mb-1 font-medium">对抗对手池来源</label>
+              <select id="selOppMode" onchange="onOppModeChange(); updateEstimates();" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+                <option value="mix">🛡️ 混合模式 (50% 真实用户模型 + 50% 经典原型)</option>
+                <option value="pure_human">🎯 真人模式 (100% 真实用户模型特训收割)</option>
+                <option value="archetypes">⚖️ 原型模式 (0% 真人，纯经典原型自博弈)</option>
               </select>
             </div>
             <div class="grid grid-cols-2 gap-2">
-              <div>
+              <div id="boxMinHands">
                 <label class="block text-slate-400 mb-1">画像入选门槛 (手)</label>
                 <input type="number" id="inpMinHands" value="100" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white" title="剔除低于该手数的样本噪声画像">
               </div>
-              <div>
+              <div id="boxAgents">
                 <label class="block text-slate-400 mb-1">每场总人数 (Agents)</label>
                 <input type="number" id="inpAgents" value="120" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
               </div>
@@ -761,12 +761,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               </label>
             </div>
 
-            <!-- 真实画像自定义勾选面板 -->
-            <div class="pt-2 border-t border-slate-800/80 space-y-2">
+            <!-- 原型模式说明提示块 (当选择原型模式时展示，明确提示不支持指定用户模型) -->
+            <div id="boxArchetypesNotice" class="hidden p-2.5 bg-indigo-950/40 border border-indigo-800/60 rounded-lg text-indigo-300 space-y-1">
+              <div class="flex items-center gap-1.5 font-bold text-xs">
+                <i class="fa-solid fa-scale-balanced text-indigo-400"></i>
+                <span>当前为【原型模式】</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                此模式由系统 8 大经典纳什博弈原型互博自演化，<span class="text-amber-300 font-semibold">无需且不挂载真人用户模型</span>。
+              </p>
+              <p class="text-[10px] text-slate-500">
+                💡 提示：如需指定参训的真实用户模型（针对性特训或混练），请将上方对手池切换为 <span class="text-emerald-400 font-semibold">【真人模式】</span> 或 <span class="text-indigo-400 font-semibold">【混合模式】</span>。
+              </p>
+            </div>
+
+            <!-- 真实用户模型挑选面板 (仅在真人模式或混合模式下显示与激活) -->
+            <div id="boxUserProfiles" class="pt-2 border-t border-slate-800/80 space-y-2">
               <div class="flex items-center justify-between">
                 <label class="text-xs text-amber-400 font-bold flex items-center gap-1.5">
                   <i class="fa-solid fa-users text-amber-400"></i> 
-                  <span>参训真实选手挑选</span>
+                  <span>指定真实用户模型 (参训对手定制)</span>
                 </label>
                 <span id="lblSelectedCount" class="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-950 border border-emerald-700 text-emerald-300">加载中...</span>
               </div>
@@ -1301,11 +1315,34 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    function onOppModeChange() {
+      const mode = document.getElementById("selOppMode").value;
+      const boxProfiles = document.getElementById("boxUserProfiles");
+      const boxNotice = document.getElementById("boxArchetypesNotice");
+      const boxMinHands = document.getElementById("boxMinHands");
+
+      if (mode === "pure_human" || mode === "mix") {
+        if (boxProfiles) boxProfiles.classList.remove("hidden");
+        if (boxNotice) boxNotice.classList.add("hidden");
+        if (boxMinHands) boxMinHands.classList.remove("opacity-40", "pointer-events-none");
+      } else {
+        // archetypes mode: hide user models selection panel and show clear prompt
+        if (boxProfiles) boxProfiles.classList.add("hidden");
+        if (boxNotice) boxNotice.classList.remove("hidden");
+        if (boxMinHands) boxMinHands.classList.add("opacity-40", "pointer-events-none");
+      }
+    }
+
     let cachedProfiles = [];
     let selectedProfileIds = new Set();
     let rosterDrawerOpen = false;
 
     function toggleRosterDrawer() {
+      const mode = document.getElementById("selOppMode").value;
+      if (mode === "archetypes") {
+        alert("当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，不挂载真人用户模型。\n如需指定参训用户模型，请将对手池切换为【真人模式】或【混合模式】。");
+        return;
+      }
       const drawer = document.getElementById("rosterDrawer");
       const icon = document.getElementById("icoRosterToggle");
       const actionText = document.getElementById("lblDrawerAction");
@@ -1322,6 +1359,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function openRosterModal() {
+      const mode = document.getElementById("selOppMode").value;
+      if (mode === "archetypes") {
+        alert("当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，不挂载真人用户模型。\n如需指定参训用户模型，请将对手池切换为【真人模式】或【混合模式】。");
+        return;
+      }
       const modal = document.getElementById("rosterModal");
       if (modal) {
         modal.classList.remove("hidden");
@@ -1528,6 +1570,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function selectProfiles(type) {
+      const mode = document.getElementById("selOppMode").value;
+      if (mode === "archetypes") {
+        alert("当前对手池为【原型模式】，基于纳什博弈经典原型自博弈，无需指定真人用户模型。\n如需指定参训选手画像，请先将对手池切换为【真人模式】或【混合模式】。");
+        return;
+      }
       if (!cachedProfiles || cachedProfiles.length === 0) return;
       if (type === "all") {
         selectedProfileIds = new Set(cachedProfiles.map(p => p.id));
@@ -1575,7 +1622,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     async function startTrain() {
       const oppMode = document.getElementById("selOppMode").value;
       if ((oppMode === "pure_human" || oppMode === "mix") && selectedProfileIds.size === 0) {
-        alert(`⚠️ 当前对手池包含真人画像，但您未勾选任何参训选手！\n请在【自定义参训真实选手】中勾选至少 1 位选手，或将对手池切换为纯经典原型池。`);
+        alert(`⚠️ 当前选择了【${oppMode === "pure_human" ? "真人模式" : "混合模式"}】，但您尚未指定任何参训真实用户模型！\n请在下方【指定真实用户模型】中挑选至少 1 位选手画像，或将对手池切换为【原型模式】。`);
         return;
       }
 
@@ -1588,7 +1635,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         start_mode: document.getElementById("selStartMode").value,
         base_model: document.getElementById("selBaseModel").value,
         opp_mode: oppMode,
-        selected_profiles: Array.from(selectedProfileIds),
+        selected_profiles: (oppMode === "pure_human" || oppMode === "mix") ? Array.from(selectedProfileIds) : [],
         min_hands: document.getElementById("inpMinHands").value,
         self_play: document.getElementById("chkSelfPlay").checked,
         save: document.getElementById("inpSavePath").value,
@@ -2001,6 +2048,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       loadModels();
       loadProfilesList();
       loadModelsDetails();
+      onStartModeChange();
+      onOppModeChange();
       fetchStatus();
       loadHands();
       refreshLogs();
