@@ -4,7 +4,7 @@ import math
 from random import Random
 from .config import TournamentConfig
 from .engine import NLHEngine
-from .context import build_context
+from .context import build_context, TableStrengthModel
 from .pairing import random_groups, swiss_groups
 from .scoring import Standing, bb100, rank_standings
 from .strategy import StrategyAgent, StrategyParams
@@ -85,11 +85,8 @@ class LeagueSimulator:
         dealer = 0
         policies = {a.agent_id: a.strategy for a in self.agents}
 
-        # Table strength metric for Swiss pairing and random rounds
-        group_bbs = [float(st[aid]['net_bb'] / max(1, st[aid]['hands']) * 100.0) if st[aid]['hands'] > 0 else 0.0 for aid in group]
-        avg_tbl_bb = sum(group_bbs) / max(1, len(group_bbs))
-        tbl_strength = max(-1.0, min(1.0, math.tanh(avg_tbl_bb / 40.0)))
-        ts_map = {aid: tbl_strength for aid in group}
+        # Table strength metric for Swiss pairing and random rounds (strictly excluding Hero)
+        ts_map = TableStrengthModel.compute_table_strength_map(group, st)
 
         for hand_i in range(hands_this_round):
             # Check for any busted players before the hand: auto-rebuy 100 BB
@@ -189,10 +186,11 @@ class LeagueSimulator:
                     b = (_local[aid]['net_bb'] / _local[aid]['hands'] * 100) if _local[aid]['hands'] > 0 else None
                     r3 = (rows[2][1]['net_bb'] / rows[2][1]['hands'] * 100) if len(rows) >= 3 and rows[2][1]['hands'] > 0 else None
                     r4 = (rows[3][1]['net_bb'] / rows[3][1]['hands'] * 100) if len(rows) >= 4 and rows[3][1]['hands'] > 0 else None
+                    ts = TableStrengthModel.compute(grp, hero_id=aid, profiles=_local)
                     return build_context(
                         rank=rank, bb100=b, hands_remaining=self.config.semifinal_hands - _h, round_no=11,
                         stage="semifinal", target_rank=3, total_stage_hands=self.config.semifinal_hands,
-                        rank3_bb100=r3, rank4_bb100=r4
+                        rank3_bb100=r3, rank4_bb100=r4, table_strength=ts,
                     )
                 res, dealer = self.engine.play_hand(grp, {aid: local[aid]['stack'] for aid in grp}, dealer, policies, context_provider=_sf_ctx)
                 for aid in grp:
@@ -247,10 +245,11 @@ class LeagueSimulator:
                 b = (_local[aid]['net_bb'] / _local[aid]['hands'] * 100) if _local[aid]['hands'] > 0 else None
                 r1 = (rows[0][1]['net_bb'] / rows[0][1]['hands'] * 100) if len(rows) >= 1 and rows[0][1]['hands'] > 0 else None
                 r2 = (rows[1][1]['net_bb'] / rows[1][1]['hands'] * 100) if len(rows) >= 2 and rows[1][1]['hands'] > 0 else None
+                ts = TableStrengthModel.compute(ids, hero_id=aid, profiles=_local)
                 return build_context(
                     rank=rank, bb100=b, hands_remaining=self.config.final_hands - _h, round_no=12,
                     stage="final", target_rank=1, total_stage_hands=self.config.final_hands,
-                    leader_bb100=r1, second_bb100=r2, rank1_bb100=r1, rank2_bb100=r2
+                    leader_bb100=r1, second_bb100=r2, rank1_bb100=r1, rank2_bb100=r2, table_strength=ts,
                 )
             res, dealer = self.engine.play_hand(ids, {aid: local[aid]['stack'] for aid in ids}, dealer, policies, context_provider=_f_ctx)
             for aid in ids:

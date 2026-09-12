@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import json, math, random
+from datetime import datetime, timezone
 from typing import Any
 from .cards import parse_card, full_hand_rank, equity_exact, evaluate_relative_strength
 from .calibration import preflop_percentile, strength_to_equity
@@ -65,6 +66,33 @@ class OpponentStats:
     checks: int = 0
     last_seen: int = 0
 
+    # Opportunity counters
+    preflop_opps: int = 0
+    vpip_count: int = 0
+    pfr_opps: int = 0
+    pfr_count: int = 0
+    threebet_opps: int = 0
+    threebet_count: int = 0
+    fold_to_threebet_opps: int = 0
+    fold_to_threebet_count: int = 0
+    cbet_opps: int = 0
+    cbet_count: int = 0
+    fold_to_cbet_opps: int = 0
+    fold_to_cbet_count: int = 0
+    turn_barrel_opps: int = 0
+    turn_barrel_count: int = 0
+    fold_to_turn_opps: int = 0
+    fold_to_turn_count: int = 0
+    river_bet_opps: int = 0
+    river_bet_count: int = 0
+    fold_to_river_opps: int = 0
+    fold_to_river_count: int = 0
+    wtsd_opps: int = 0
+    wtsd_count: int = 0
+    wsd_opps: int = 0
+    wsd_count: int = 0
+    raw_data: dict[str, Any] = field(default_factory=dict)
+
     def profile(self) -> dict[str, float]:
         n = max(1, self.hands)
         return {
@@ -78,26 +106,70 @@ class OpponentStats:
         }
 
     def smoothed_profile(self, prior_weight: float = 8.0) -> dict[str, Any]:
-        """Bayesian-smoothed profile metrics to avoid small-sample distortion."""
-        prior_vpip = 0.25
-        prior_raise = 0.16
-        prior_fold = 0.52
-        prior_call = 0.32
+        """Bayesian-smoothed profile metrics with opportunity-based denominators."""
         w = max(1.0, float(prior_weight))
-        denom = float(self.hands) + w
-        svpip = (self.vpip + w * prior_vpip) / denom
-        sraise = (self.raises + w * prior_raise) / denom
-        sfold = (self.folds + w * prior_fold) / denom
-        scall = (self.calls + w * prior_call) / denom
+        has_opps = (self.preflop_opps > 0 or self.cbet_opps > 0 or self.threebet_opps > 0 or self.pfr_opps > 0)
+
+        if has_opps:
+            v_opp = max(1, self.preflop_opps)
+            pfr_opp = max(1, self.pfr_opps)
+            threebet_opp = max(1, self.threebet_opps)
+            cbet_opp = max(1, self.cbet_opps)
+            fold_cbet_opp = max(1, self.fold_to_cbet_opps)
+            wtsd_opp = max(1, self.wtsd_opps)
+
+            svpip = (self.vpip_count + w * 0.25) / (v_opp + w)
+            spfr = (self.pfr_count + w * 0.18) / (pfr_opp + w)
+            sthreebet = (self.threebet_count + 10.0 * 0.08) / (threebet_opp + 10.0) if self.threebet_opps > 0 else 0.08
+            scbet = (self.cbet_count + w * 0.55) / (cbet_opp + w) if self.cbet_opps > 0 else 0.55
+            sfold_cbet = (self.fold_to_cbet_count + w * 0.45) / (fold_cbet_opp + w) if self.fold_to_cbet_opps > 0 else 0.45
+            swtsd = (self.wtsd_count + w * 0.30) / (wtsd_opp + w) if self.wtsd_opps > 0 else 0.30
+
+            denom = float(self.hands) + w
+            sraise = (self.raises + w * 0.16) / denom
+            sfold = (self.folds + w * 0.52) / denom
+            scall = (self.calls + w * 0.32) / denom
+
+            conf_vpip = self.preflop_opps / (self.preflop_opps + w)
+            conf_cbet = self.cbet_opps / (self.cbet_opps + w) if self.cbet_opps > 0 else 0.0
+            conf_threebet = self.threebet_opps / (self.threebet_opps + 10.0) if self.threebet_opps > 0 else 0.0
+        else:
+            denom = float(self.hands) + w
+            svpip = (self.vpip + w * 0.25) / denom
+            sraise = (self.raises + w * 0.16) / denom
+            sfold = (self.folds + w * 0.52) / denom
+            scall = (self.calls + w * 0.32) / denom
+            spfr = sraise
+            sthreebet = 0.08
+            scbet = 0.55
+            sfold_cbet = sfold
+            swtsd = 0.30
+            conf_vpip = float(self.hands) / denom if self.hands > 0 else 0.0
+            conf_cbet = 0.0
+            conf_threebet = 0.0
+
+        is_station = (scall >= 0.38 and sfold <= 0.36) or (sfold_cbet <= 0.35 and swtsd >= 0.35)
+        is_nit = svpip <= 0.18 and (sfold >= 0.58 or spfr <= 0.14)
+        is_maniac = svpip >= 0.44 and (sraise >= 0.26 or sthreebet >= 0.18 or scbet >= 0.75)
+        is_passive = sraise <= 0.11 and sthreebet <= 0.05
+
         return {
             "vpip": svpip,
+            "pfr": spfr,
             "raise": sraise,
             "fold": sfold,
             "call": scall,
-            "is_station": scall >= 0.38 and sfold <= 0.36,
-            "is_nit": svpip <= 0.18 and sfold >= 0.58,
-            "is_maniac": svpip >= 0.44 and sraise >= 0.26,
-            "is_passive": sraise <= 0.11,
+            "threebet": sthreebet,
+            "cbet_flop": scbet,
+            "fold_to_cbet": sfold_cbet,
+            "wtsd": swtsd,
+            "confidence_vpip": conf_vpip,
+            "confidence_cbet": conf_cbet,
+            "confidence_threebet": conf_threebet,
+            "is_station": is_station,
+            "is_nit": is_nit,
+            "is_maniac": is_maniac,
+            "is_passive": is_passive,
             "hands": self.hands,
         }
 
@@ -157,6 +229,33 @@ class StrategyAgent:
             st.calls = int(stats.get("calls_count", stats.get("calls", stats.get("call", st.calls))))
             st.bets = int(stats.get("bets_count", stats.get("bets", stats.get("bet", st.bets))))
             st.checks = int(stats.get("checks_count", stats.get("checks", stats.get("check", st.checks))))
+
+            # Opportunity counters
+            st.preflop_opps = int(stats.get("vpip_opps", stats.get("preflop_opps", stats.get("hands", st.hands))))
+            st.vpip_count = int(stats.get("vpip_count", st.vpip))
+            st.pfr_opps = int(stats.get("pfr_opps", stats.get("hands", st.hands)))
+            st.pfr_count = int(stats.get("pfr_count", stats.get("pfr", 0)))
+            st.threebet_opps = int(stats.get("threebet_opps", 0))
+            st.threebet_count = int(stats.get("threebet_count", 0))
+            st.fold_to_threebet_opps = int(stats.get("fold_to_threebet_opps", 0))
+            st.fold_to_threebet_count = int(stats.get("fold_to_threebet_count", 0))
+            st.cbet_opps = int(stats.get("cbet_opps", 0))
+            st.cbet_count = int(stats.get("cbet_count", 0))
+            st.fold_to_cbet_opps = int(stats.get("fold_to_cbet_opps", 0))
+            st.fold_to_cbet_count = int(stats.get("fold_to_cbet_count", 0))
+            st.turn_barrel_opps = int(stats.get("turn_barrel_opps", 0))
+            st.turn_barrel_count = int(stats.get("turn_barrel_count", 0))
+            st.fold_to_turn_opps = int(stats.get("fold_to_turn_opps", 0))
+            st.fold_to_turn_count = int(stats.get("fold_to_turn_count", 0))
+            st.river_bet_opps = int(stats.get("river_bet_opps", 0))
+            st.river_bet_count = int(stats.get("river_bet_count", 0))
+            st.fold_to_river_opps = int(stats.get("fold_to_river_opps", 0))
+            st.fold_to_river_count = int(stats.get("fold_to_river_count", 0))
+            st.wtsd_opps = int(stats.get("wtsd_opps", 0))
+            st.wtsd_count = int(stats.get("wtsd_count", 0))
+            st.wsd_opps = int(stats.get("wsd_opps", 0))
+            st.wsd_count = int(stats.get("wsd_count", 0))
+            st.raw_data = stats
             loaded += 1
         return loaded
 
@@ -527,6 +626,8 @@ class StrategyAgent:
                     return {"type": "allIn"}
                 if "raise" in legal:
                     return {"type": "raise", "amount": int(legal["raise"][1])}
+                if is_opening and pos_tag in {"utg", "mp", "hj", "co", "btn", "early", "late"}:
+                    return {"type": "fold"} if "fold" in legal else self._safe_action(legal)
                 if "call" in legal:
                     return {"type": "call"}
             elif call == 0 and "check" in legal:
@@ -580,22 +681,32 @@ class StrategyAgent:
         preflop_size_mult = 1.30 if (villain.get("is_station") or villain.get("is_passive")) else 1.0
 
         if is_opening:
-            if in_open_range and ("raise" in legal or "bet" in legal):
-                freq = self.params.steal_frequency if is_steal else self.params.open_frequency
-                if villain.get("fold", 0.52) > 0.58:
-                    freq = min(0.98, freq * 1.25)
-                elif villain.get("is_station"):
-                    freq *= 0.85
-                if stage == "final" and rank >= 2 and (stage_progress > 0.3 or rem_val <= 15):
-                    freq = min(0.98, freq * 1.20)
-                is_core = premium or score >= 1.0 - open_target * 0.85
-                if is_core or self._noise(freq):
+            # In normal non-blind positions (UTG, MP/HJ, CO, BTN), open-limping is strictly prohibited.
+            # Strategy is strictly Open-or-Fold: raise if in range, fold otherwise.
+            if pos_tag in {"utg", "mp", "hj", "co", "btn", "early", "late"}:
+                if in_open_range and ("raise" in legal or "bet" in legal or "allIn" in legal):
                     self._hero_is_aggressor = True
                     return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult)
-            # Passive / Calling Station archetypes enter passively by limping when in_range:
-            if in_range and "call" in legal:
-                if pos_tag == "sb" or callers >= 1 or self.params.open_frequency <= 0.30 or self.params.attack <= 0.40:
+                if "fold" in legal:
+                    return {"type": "fold"}
+                if call == 0 and "check" in legal:
+                    return {"type": "check"}
+                return {"type": "fold"} if "fold" in legal else self._safe_action(legal)
+
+            # SB position: Open-raise if in open range, fold otherwise (or rare complete for passive variants)
+            if pos_tag == "sb":
+                if in_open_range and ("raise" in legal or "bet" in legal or "allIn" in legal):
+                    self._hero_is_aggressor = True
+                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult)
+                if in_range and "call" in legal and self.params.open_frequency <= 0.25 and self._noise(0.10):
                     return {"type": "call"}
+                if "fold" in legal:
+                    return {"type": "fold"}
+                if call == 0 and "check" in legal:
+                    return {"type": "check"}
+                return {"type": "fold"} if "fold" in legal else self._safe_action(legal)
+
+            # BB position when unopened (walk)
             if call == 0 and "check" in legal:
                 return {"type": "check"}
             if "fold" in legal:
@@ -634,10 +745,18 @@ class StrategyAgent:
             if "fold" in legal:
                 return {"type": "fold"}
 
+        if is_opening and pos_tag in {"utg", "mp", "hj", "co", "btn", "early", "late"}:
+            if "fold" in legal:
+                return {"type": "fold"}
+            if call == 0 and "check" in legal:
+                return {"type": "check"}
+
         if "check" in legal:
             return {"type": "check"}
         if "fold" in legal:
             return {"type": "fold"}
+        if is_opening and pos_tag in {"utg", "mp", "hj", "co", "btn", "early", "late"}:
+            return {"type": "fold"} if "fold" in legal else self._safe_action(legal)
         if "call" in legal:
             return {"type": "call"}
         if "allIn" in legal:
@@ -651,7 +770,11 @@ class StrategyAgent:
     def _preflop_raise(self, legal: dict[str, Any], premium: bool, bb_size: float = 200.0, size_mult: float = 1.0) -> dict[str, Any]:
         spec = legal.get("raise", legal.get("bet"))
         if not spec:
-            return {"type": "allIn"} if "allIn" in legal else {"type": "call"}
+            if "allIn" in legal:
+                return {"type": "allIn"}
+            if "fold" in legal:
+                return {"type": "fold"}
+            return {"type": "call"} if "call" in legal else self._safe_action(legal)
         lo, hi = _extract_spec_range(spec)
         action_type = "raise" if "raise" in legal else "bet"
         if lo >= hi:
@@ -1006,10 +1129,70 @@ class StrategyAgent:
     @classmethod
     def load(cls, path: str | Path, profiles: dict[str, Any] | str | Path | None = None) -> StrategyAgent:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        raw = data.get("champion") or data.get("params") or data
+        raw = data.get("champion") or data.get("parameters") or data.get("params") or data
         valid_keys = set(asdict(StrategyParams()).keys())
         params_dict = {k: v for k, v in raw.items() if k in valid_keys} if isinstance(raw, dict) else raw
         agent = cls(StrategyParams(**params_dict))
         if profiles is not None:
             agent.load_opponent_profiles(profiles)
         return agent
+
+
+def validate_model_schema(data: dict[str, Any]) -> bool:
+    """Validate that model dictionary adheres to schema_version 2.
+    
+    Required fields:
+      - schema_version == 2
+      - model_version: str
+      - candidate_cid: str
+      - archetype: str
+      - parameters: dict
+      - certification: dict
+      - created_at: str
+    """
+    required = [
+        "schema_version",
+        "model_version",
+        "candidate_cid",
+        "archetype",
+        "parameters",
+        "certification",
+        "created_at",
+    ]
+    for r in required:
+        if r not in data:
+            raise ValueError(f"Model schema validation failed: missing required key '{r}'")
+    if data["schema_version"] != 2:
+        raise ValueError(f"Model schema validation failed: expected schema_version 2, got {data['schema_version']}")
+    if not isinstance(data["parameters"], dict):
+        raise ValueError("Model schema validation failed: 'parameters' must be a dict")
+    if not isinstance(data["certification"], dict):
+        raise ValueError("Model schema validation failed: 'certification' must be a dict")
+    return True
+
+
+def migrate_model_schema(data: dict[str, Any]) -> dict[str, Any]:
+    """Migrate legacy v1 schema to schema_version 2."""
+    if data.get("schema_version") == 2:
+        validate_model_schema(data)
+        return data
+
+    params = data.get("parameters") or data.get("params") or {}
+    cert = data.get("certification") or {}
+    cid = cert.get("candidate_id") or data.get("candidate_cid") or "model:migrated"
+    timestamp = cert.get("timestamp") or data.get("created_at") or datetime.now(timezone.utc).isoformat()
+    version_val = data.get("model_version") or f"2.{data.get('version', 0)}.0"
+
+    migrated = {
+        "schema_version": 2,
+        "model_version": str(version_val),
+        "candidate_cid": cid,
+        "name": data.get("name", "Migrated Model"),
+        "archetype": data.get("archetype", "TAG"),
+        "parameters": params,
+        "params": params,  # backward compatibility
+        "certification": cert,
+        "created_at": timestamp,
+    }
+    validate_model_schema(migrated)
+    return migrated

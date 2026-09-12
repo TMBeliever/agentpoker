@@ -1,4 +1,8 @@
 {
+  "historical": true,
+  "legacy": true,
+  "is_current_production": false,
+  "note": "Historical record from Stage 11 development sprint. Superceded by production_certification_report.json.",
   "report": {
     "runs": 50,
     "field_size": 120,

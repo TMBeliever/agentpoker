@@ -369,7 +369,12 @@ class ArenaBattle:
         equity_samples: int = 0,
         workers: int = 0,
         seed: int = 42,
+        official: bool = False,
     ):
+        if official and field_size != 120:
+            raise ValueError(f"Official benchmark strictly requires field_size == 120, got {field_size}")
+        self.official = official
+
         if len(competitors) < 2:
             raise ValueError("ArenaBattle requires at least 2 competitor agents.")
 
@@ -393,6 +398,10 @@ class ArenaBattle:
         self.field_size = max(min_field, field_size)
         if self.field_size % 6 != 0:
             self.field_size += 6 - (self.field_size % 6)
+
+        if self.official and self.field_size != 120:
+            raise ValueError(f"Official benchmark strictly requires field_size == 120, got {self.field_size}")
+
         self.equity_samples = equity_samples
         self.workers = workers or min(os.cpu_count() or 4, 8)
         self.seed = seed
@@ -670,16 +679,41 @@ def certify_champion(
     report: dict[str, Any],
     candidate_cid: str | None = None,
     baseline_cids: list[str] | None = None,
-    min_champ_multiplier: float = 2.0,
-    min_top12_multiplier: float = 1.5,
-    min_bb100: float = 0.0,
+    min_champ_multiplier: float | None = None,
+    min_top12_multiplier: float | None = None,
+    min_bb100: float | None = None,
+    policy_path: str | Path | None = "configs/certification_policy.json",
+    official: bool = True,
 ) -> ChampionCertificationResult:
     """Evaluate candidate model against strict mathematical tournament champion certification criteria."""
+    policy = {}
+    if policy_path and Path(policy_path).exists():
+        try:
+            policy = json.loads(Path(policy_path).read_text(encoding="utf-8"))
+        except Exception:
+            policy = {}
+    invariants = policy.get("invariants", {})
+
+    field_size = report.get("field_size", 120)
+    required_field_size = int(invariants.get("required_field_size", 120))
+    if official and field_size != required_field_size:
+        raise ValueError(
+            f"Official champion certification strictly requires field_size == {required_field_size}, got {field_size}"
+        )
+
+    if min_champ_multiplier is None:
+        min_champ_multiplier = float(invariants.get("min_champ_multiplier", 2.0))
+    if min_top12_multiplier is None:
+        min_top12_multiplier = float(invariants.get("min_top12_multiplier", 1.5))
+    if min_bb100 is None:
+        min_bb100 = float(invariants.get("min_bb100", 0.0))
+    min_h2h_win_rate = float(invariants.get("min_h2h_win_rate", 50.0))
+    allow_ev_bypass = bool(invariants.get("allow_ev_bypass", False))
+
     board = report.get("leaderboard", [])
     if not board:
         raise ValueError("Report contains empty leaderboard; cannot certify champion.")
 
-    field_size = report.get("field_size", 120)
     runs = report.get("runs", 1)
     h2h = report.get("h2h_matrix", {})
 
@@ -700,12 +734,15 @@ def certify_champion(
     name = candidate_row["name"]
     criteria: list[CertificationCriterion] = []
 
+    require_rank_1 = bool(invariants.get("require_rank_1", True))
+    require_all_passed = bool(invariants.get("require_all_passed", True))
+
     # Criterion 1: Leaderboard Standing == 1
     standing = candidate_row.get("standing", 1)
-    c1_passed = (standing == 1)
+    c1_passed = (standing == 1) if require_rank_1 else True
     criteria.append(CertificationCriterion(
         name="Leaderboard Rank #1",
-        required="Standing == 1",
+        required="Standing == 1" if require_rank_1 else "Standing Ignored",
         actual=f"Standing #{standing}",
         passed=c1_passed,
         detail=f"Candidate must achieve Rank 1 overall tournament score (Score: {candidate_row['score']:.1f})",
@@ -778,8 +815,8 @@ def certify_champion(
         for b_cid in baseline_cids:
             pair_rate = candidate_h2h.get(b_cid, {}).get("win_rate", 50.0)
             b_row = board_by_cid.get(b_cid)
-            dominates = (pair_rate >= 50.0)
-            if not dominates and b_row is not None:
+            dominates = (pair_rate >= min_h2h_win_rate)
+            if not dominates and allow_ev_bypass and b_row is not None:
                 tournament_ev_superior = (
                     candidate_row.get("score", 0) >= b_row.get("score", 0)
                     and candidate_row.get("avg_bb100", 0) >= b_row.get("avg_bb100", 0)
@@ -790,7 +827,9 @@ def certify_champion(
                     dominates = True
                     h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H (EV Superior: Final {candidate_row['final_rate']:.1%} vs {b_row['final_rate']:.1%}, +{candidate_row['avg_bb100']:.1f} vs +{b_row['avg_bb100']:.1f} BB/100)")
                 else:
-                    h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H")
+                    h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H (below required {min_h2h_win_rate:.1f}%)")
+            elif not dominates:
+                h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H (below required {min_h2h_win_rate:.1f}%)")
             else:
                 h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H")
 
@@ -799,21 +838,25 @@ def certify_champion(
     elif candidate_h2h:
         rates = [v.get("win_rate", 50.0) for v in candidate_h2h.values()]
         avg_h2h = sum(rates) / max(1, len(rates))
-        h2h_passed = (avg_h2h >= 50.0)
+        h2h_passed = (avg_h2h >= min_h2h_win_rate)
         h2h_details.append(f"Average pairwise win rate: {avg_h2h:.1f}%")
     else:
         h2h_passed = True
         h2h_details.append("No competitor head-to-head records")
 
+    req_h2h_desc = f"Win rate >= {min_h2h_win_rate:.1f}% against benchmark"
+    if allow_ev_bypass:
+        req_h2h_desc += " OR superior tournament EV (score/BB100/final rate)"
+
     criteria.append(CertificationCriterion(
         name="Benchmark Dominance & Tournament EV",
-        required="Win rate >= 50.0% against benchmark OR superior tournament EV (score/BB100/final rate)",
+        required=req_h2h_desc,
         actual=", ".join(h2h_details) if h2h_details else "N/A",
         passed=h2h_passed,
         detail="Candidate must demonstrate pairwise or tournament equity dominance over legacy benchmarks",
     ))
 
-    all_passed = all(c.passed for c in criteria)
+    all_passed = all(c.passed for c in criteria) if require_all_passed else True
     recommendation = "PROMOTE_TO_CHAMPION" if all_passed else "REJECT"
     summary = (
         f"Candidate '{name}' ({cid}) PASSED all {len(criteria)} certification criteria."
@@ -854,6 +897,11 @@ def print_certification_card(result: ChampionCertificationResult):
     print("=" * 86 + "\n")
 
 
+class CertificationError(RuntimeError):
+    """Raised when an uncertified or failing candidate attempts champion promotion."""
+    pass
+
+
 def promote_champion(
     candidate_source: str | Path,
     target_path: str | Path = "models/champion.json",
@@ -861,6 +909,15 @@ def promote_champion(
     certification_result: ChampionCertificationResult | None = None,
 ) -> Path:
     """Safely promote certified candidate model to production champion.json with timestamped backup."""
+    if certification_result is None or not isinstance(certification_result, ChampionCertificationResult):
+        raise CertificationError(
+            "Champion promotion strictly requires a valid ChampionCertificationResult object. Promotion aborted."
+        )
+    if not certification_result.certified:
+        raise CertificationError(
+            f"Candidate cannot be promoted: certification failed ({certification_result.summary}). Promotion aborted."
+        )
+
     src = Path(candidate_source)
     tgt = Path(target_path)
     if not src.exists():
@@ -874,8 +931,7 @@ def promote_champion(
         print(f"[Champion Gate] Backed up existing champion to: {backup_path}")
 
     content = json.loads(src.read_text(encoding="utf-8"))
-    if certification_result is not None:
-        content["certification"] = certification_result.to_dict()
+    content["certification"] = certification_result.to_dict()
 
     tgt.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[Champion Gate] Successfully promoted '{src.name}' -> '{tgt.resolve()}'")

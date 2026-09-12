@@ -159,7 +159,7 @@ def main():
     bt.add_argument('--models',nargs='*',default=None,help='参赛模型文件路径列表 (如 models/champion.json models/archive_universal/gen_004.json)')
     bt.add_argument('--archetypes',nargs='*',default=None,help='参赛内置原型 Bot 列表 (如 tight lag maniac nit station balanced)')
     bt.add_argument('--profiles',nargs='*',default=None,help='参赛真实玩家 agent_id 列表 (如 agent_2b330360a0882e97)')
-    bt.add_argument('--opponents',choices=['pyramid','mix','profiles','archetypes','sharks','fish'],default='pyramid',help='陪练对手池来源: pyramid=金字塔生态(30%鲨鱼+40%常规+30%鱼, 默认), mix=混合池, profiles=纯真实画像, archetypes=纯原型Bot, sharks=全鲨鱼压测, fish=全鱼收割测试')
+    bt.add_argument('--opponents',choices=['pyramid','mix','profiles','archetypes','sharks','fish'],default='pyramid',help='陪练对手池来源: pyramid=金字塔生态(30%%鲨鱼+40%%常规+30%%鱼, 默认), mix=混合池, profiles=纯真实画像, archetypes=纯原型Bot, sharks=全鲨鱼压测, fish=全鱼收割测试')
     bt.add_argument('--profiles-file',default='models/opponent_profiles.json',help='对手画像文件路径')
     bt.add_argument('--runs',type=int,default=None,help='擂台锦标赛场数 (默认 20)')
     bt.add_argument('--agents',type=int,default=default_field,help=f'每场锦标赛总人数，6的倍数 (默认 {default_field})')
@@ -270,23 +270,15 @@ def main():
                 pass
         if not cid:
             raise SystemExit('Error: AGENTPOKER_COMPETITION_ID is required.')
-        prof_file=args.profiles if args.profiles and os.path.exists(args.profiles) else None
-        strat_path = args.strategy
-        if not strat_path:
-            for cand in (
-                "models/archive_optimized/gen_025.json",
-                "models/champion_optimized.json",
-                "models/archive_optimized/gen_011.json",
-                "models/archive_optimized/gen_007.json",
-                "models/champion_secondary.json",
-                "models/champion.json",
-            ):
-                if os.path.exists(cand):
-                    strat_path = cand
-                    break
-            strat_path = strat_path or "models/champion.json"
+        prof_file = args.profiles if args.profiles and os.path.exists(args.profiles) else None
+        strat_path = args.strategy or "models/champion.json"
+        if not os.path.exists(strat_path):
+            raise FileNotFoundError(
+                f"Production strategy model file not found: '{strat_path}'. "
+                f"Live play cannot run without an official certified champion model."
+            )
 
-        st = StrategyAgent.load(strat_path, profiles=prof_file) if os.path.exists(strat_path) else StrategyAgent(profiles=prof_file)
+        st = StrategyAgent.load(strat_path, profiles=prof_file)
         samples_val = getattr(args, 'equity_samples', 200) or 200
         st.params.equity_samples = samples_val
         print(f"[Live] 🎯 比赛优选模型已装载: {strat_path}")

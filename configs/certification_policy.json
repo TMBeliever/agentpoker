@@ -1,0 +1,41 @@
+{
+  "policy_name": "Official 120-Player Tournament Champion Certification Policy",
+  "version": 1,
+  "invariants": {
+    "require_rank_1": true,
+    "required_field_size": 120,
+    "min_champ_multiplier": 2.0,
+    "min_top12_multiplier": 1.5,
+    "min_bb100": 0.0,
+    "min_h2h_win_rate": 50.0,
+    "allow_ev_bypass": false,
+    "require_all_passed": true
+  },
+  "criteria_definitions": [
+    {
+      "id": "c1_standing",
+      "name": "Leaderboard Rank #1",
+      "description": "Candidate must achieve Rank 1 overall tournament score on the official leaderboard."
+    },
+    {
+      "id": "c2_titles",
+      "name": "Title / Deep Run Superiority",
+      "description": "Candidate must outperform random expectation by >= 2.0x in titles (runs >= field) or final table rate (runs < field)."
+    },
+    {
+      "id": "c3_bb100",
+      "name": "Positive Expected Value (BB/100)",
+      "description": "Candidate must maintain strictly positive BB/100 across the tournament."
+    },
+    {
+      "id": "c4_top12",
+      "name": "Top 12 Deep Run Qualification Rate",
+      "description": "Candidate preliminary playoff qualification rate must outperform random expectation by >= 1.5x (>= 15% in 120-player field)."
+    },
+    {
+      "id": "c5_dominance",
+      "name": "Benchmark Dominance & Tournament EV",
+      "description": "Candidate must achieve >= 50% pairwise win rate or superior tournament EV against all declared baseline models."
+    }
+  ]
+}

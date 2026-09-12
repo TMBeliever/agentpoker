@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from .protocol import AgentPokerClient, APIError, Config
+from .config import TournamentConfig, ExecutionMode
 from .strategy import StrategyAgent
 from .collector import JSONLCollector
 from .profiler import OpponentProfiler
@@ -14,7 +15,7 @@ class LiveRunner:
     def __init__(
         self,
         client: AgentPokerClient,
-        strategy: StrategyAgent,
+        strategy: StrategyAgent | None = None,
         competition_id: str | None = None,
         collector: JSONLCollector | None = None,
         idle_seconds: int = 30,
@@ -26,11 +27,23 @@ class LiveRunner:
         profiles_path: str = "models/opponent_profiles.json",
         report_path: str = "data/live_reports.jsonl",
         strategy_path: str | None = None,
+        config: TournamentConfig | None = None,
     ):
+        self.config = config or TournamentConfig.official_120()
         self.client = client
-        self.strategy = strategy
-        self.strategy_path = strategy_path
-        self._strategy_mtime = os.path.getmtime(strategy_path) if strategy_path and os.path.exists(strategy_path) else 0.0
+        self.strategy_path = strategy_path or "models/champion.json"
+        if strategy is not None:
+            self.strategy = strategy
+        else:
+            if not os.path.exists(self.strategy_path):
+                raise FileNotFoundError(
+                    f"Production model not found at '{self.strategy_path}'. "
+                    f"Live play strictly requires an official certified champion model and will not fallback to untrained defaults."
+                )
+            prof_file = profiles_path if profiles_path and os.path.exists(profiles_path) else None
+            self.strategy = StrategyAgent.load(self.strategy_path, profiles=prof_file)
+
+        self._strategy_mtime = os.path.getmtime(self.strategy_path) if os.path.exists(self.strategy_path) else 0.0
         self.cid = competition_id or client.cfg.competition_id
         self.table_id = None
         self.collector = collector
@@ -496,6 +509,8 @@ class LiveRunner:
         if ctx is None:
             ctx = synthetic_context(cycle_bb100, rem, self.current_round, self.current_cycle)
         return ctx
+
+    _get_tournament_context = _tournament_context
 
     def _refresh_standings(self) -> None:
         """Best-effort standings refresh; failures leave the synthetic ladder in place."""
