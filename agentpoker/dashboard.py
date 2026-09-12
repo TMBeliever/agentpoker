@@ -52,7 +52,7 @@ class ProcessManager:
         generations = str(params.get("generations", 10))
         population = str(params.get("population", 8))
         runs = str(params.get("runs", 40))
-        agents = str(params.get("agents", 36))
+        agents = str(params.get("agents", 120))
         workers = str(params.get("workers", 2))
         save_path = params.get("save") or "models/champion_v2.json"
         archive = params.get("archive") or "models/archive_v2"
@@ -669,7 +669,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               </div>
               <div>
                 <label class="block text-slate-400 mb-1">每场总人数 (Agents)</label>
-                <input type="number" id="inpAgents" value="36" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
+                <input type="number" id="inpAgents" value="120" oninput="updateEstimates()" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
               </div>
             </div>
             <div class="pt-1.5 border-t border-slate-800/60 flex items-center space-x-2">

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import time, copy, json, os
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -506,23 +507,54 @@ class LiveRunner:
         rows = data.get("standings") or data.get("rows") or data.get("competitors") or []
         self._standings_rows = rows if isinstance(rows, list) else []
 
+    @staticmethod
+    def _fallback_action(legal: dict[str, Any]) -> dict[str, Any]:
+        """Safest guaranteed legal action in priority order: check -> call(0) -> fold -> call -> allIn."""
+        if 'check' in legal:
+            return {'type': 'check'}
+        if 'call' in legal:
+            call_spec = legal['call']
+            c_amt = int(call_spec.get('amount', 0)) if isinstance(call_spec, dict) else 0
+            if c_amt == 0:
+                return {'type': 'call'}
+        if 'fold' in legal:
+            return {'type': 'fold'}
+        if 'call' in legal:
+            return {'type': 'call'}
+        if 'allIn' in legal:
+            return {'type': 'allIn'}
+        for k in ('raise', 'bet'):
+            if k in legal:
+                spec = legal[k]
+                lo = int(spec.get('minAmount', 1)) if isinstance(spec, dict) else 1
+                return {'type': k, 'amount': lo}
+        raise RuntimeError("No legal actions available in actionRequest")
+
     def _make_action_body(self, obs: dict[str, Any]) -> dict[str, Any]:
         self._check_and_reload_strategy()
         obs["tournamentContext"] = self._tournament_context(obs.get("agentId"))
 
         req = copy.deepcopy(obs['actionRequest'])
-        decision = self.strategy.choose(obs)
         allowed = req.get('allowedActions') or []
-        legal = {a['type']: a for a in allowed}
-        if decision.get('type') not in legal:
-            raise RuntimeError('strategy emitted action not in allowedActions')
+        legal = {a['type']: a for a in allowed if isinstance(a, dict) and a.get('type')}
+
+        try:
+            decision = self.strategy.choose(obs)
+        except Exception as e:
+            print(f"[Live] Warning: strategy error: {e}, falling back to safe action")
+            decision = self._fallback_action(legal)
+
+        if not decision or decision.get('type') not in legal:
+            print(f"[Live] Warning: illegal action {decision} generated, falling back to safe action")
+            decision = self._fallback_action(legal)
+
         if decision['type'] in ('bet', 'raise'):
             spec = legal[decision['type']]
-            lo = int(spec['minAmount'])
-            hi = int(spec['maxAmount'])
-            amt = int(decision.get('amount', 0))
+            lo = int(spec.get('minAmount', 1)) if isinstance(spec, dict) else 1
+            hi = int(spec.get('maxAmount', lo)) if isinstance(spec, dict) else lo
+            amt = int(decision.get('amount', lo))
             if not (lo <= amt <= hi) or amt <= 0:
-                raise RuntimeError('strategy emitted invalid amount')
+                decision['amount'] = max(lo, min(hi, amt)) if lo <= hi else lo
         elif 'amount' in decision:
             decision.pop('amount', None)
         return {
@@ -532,26 +564,44 @@ class LiveRunner:
             'decision': decision,
         }
 
-    def _action_with_retry(self, body, original_obs):
+    def _action_with_retry(self, body, original_obs, max_attempts: int = 4):
         frozen = json.loads(json.dumps(body, ensure_ascii=False))
+        attempts = 0
+        backoff = 0.5
         while True:
+            attempts += 1
             try:
                 return self.client.action(frozen)
+            except requests.RequestException as net_err:
+                if attempts >= max_attempts:
+                    print(f"[Live] Action network error after {attempts} attempts: {net_err}, refreshing table state")
+                    return self._observe_current()
+                time.sleep(backoff)
+                backoff = min(8.0, backoff * 2.0)
+                continue
             except APIError as e:
-                if e.code in ('temporarily_unavailable',):
-                    time.sleep(e.retry_after or 1)
+                if e.code in ('temporarily_unavailable', 'service_unavailable', 'gateway_timeout') or e.status in (502, 503, 504):
+                    if attempts >= max_attempts:
+                        return self._observe_current()
+                    time.sleep(e.retry_after or backoff)
+                    backoff = min(8.0, backoff * 2.0)
                     continue
-                if e.code in ('stale_action_request', 'idempotency_conflict'):
+                if e.code in ('stale_action_request', 'idempotency_conflict', 'action_timeout', 'action_expired'):
                     return self._observe_current()
                 if e.code == 'stale_table':
                     self.table_id = None
                     return self.client.observe(self.cid)
                 if e.code == 'invalid_decision':
                     fresh = self._observe_current()
-                    return self.client.action(self._make_action_body(fresh))
-                if e.code == 'authentication_required':
+                    if fresh.get('actionRequest'):
+                        return self.client.action(self._make_action_body(fresh))
+                    return fresh
+                if e.code in ('authentication_required', 'insufficient_bankroll'):
                     raise
-                raise
+                if attempts >= max_attempts:
+                    raise
+                time.sleep(backoff)
+                backoff = min(8.0, backoff * 2.0)
 
     def _leave(self, obs):
         body = {'tableId': obs['table']['id']} if obs.get('table') else {'competitionId': self.cid}

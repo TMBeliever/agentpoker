@@ -1,0 +1,216 @@
+{
+  "report": {
+    "runs": 30,
+    "field_size": 120,
+    "opponent_mode": "pyramid",
+    "leaderboard": [
+      {
+        "cid": "archetype:tight",
+        "name": "bot_tight_TAG",
+        "category": "archetype",
+        "champ_count": 1,
+        "champ_rate": 0.03333333333333333,
+        "champ_se": 0.032773069341672505,
+        "final_count": 5,
+        "final_rate": 0.16666666666666666,
+        "final_se": 0.06804138174397717,
+        "top12_count": 6,
+        "top12_rate": 0.2,
+        "top12_se": 0.07302967433402216,
+        "avg_rank": 49.833333333333336,
+        "avg_bb100": 226.29218500797447,
+        "bb_se": 177.84168384385674,
+        "total_hands": 6270,
+        "score": 16.74804835042059,
+        "standing": 1
+      },
+      {
+        "cid": "model:v3_candidate",
+        "name": "NextGen_Champion_v3",
+        "category": "model",
+        "champ_count": 0,
+        "champ_rate": 0.0,
+        "champ_se": 0.0,
+        "final_count": 2,
+        "final_rate": 0.06666666666666667,
+        "final_se": 0.04554200340426488,
+        "top12_count": 4,
+        "top12_rate": 0.13333333333333333,
+        "top12_se": 0.06206328908341752,
+        "avg_rank": 49.36666666666667,
+        "avg_bb100": 189.43200325732897,
+        "bb_se": 180.6065542860806,
+        "total_hands": 6140,
+        "score": 11.590958347590831,
+        "standing": 2
+      },
+      {
+        "cid": "model:gen_028",
+        "name": "Legacy_Gen_028",
+        "category": "model",
+        "champ_count": 0,
+        "champ_rate": 0.0,
+        "champ_se": 0.0,
+        "final_count": 2,
+        "final_rate": 0.06666666666666667,
+        "final_se": 0.04554200340426488,
+        "top12_count": 3,
+        "top12_rate": 0.1,
+        "top12_se": 0.05477225575051661,
+        "avg_rank": 42.766666666666666,
+        "avg_bb100": 104.84591503267973,
+        "bb_se": 100.58792368478287,
+        "total_hands": 6120,
+        "score": 11.072816113874634,
+        "standing": 3
+      },
+      {
+        "cid": "archetype:lag",
+        "name": "bot_lag",
+        "category": "archetype",
+        "champ_count": 0,
+        "champ_rate": 0.0,
+        "champ_se": 0.0,
+        "final_count": 0,
+        "final_rate": 0.0,
+        "final_se": 0.0,
+        "top12_count": 0,
+        "top12_rate": 0.0,
+        "top12_se": 0.0,
+        "avg_rank": 77.36666666666666,
+        "avg_bb100": -346.1308333333333,
+        "bb_se": 63.489336987716655,
+        "total_hands": 6000,
+        "score": 1.8247807812320689,
+        "standing": 4
+      }
+    ],
+    "h2h_matrix": {
+      "model:v3_candidate": {
+        "archetype:tight": {
+          "wins": 16,
+          "losses": 14,
+          "ties": 0,
+          "win_rate": 53.333333333333336
+        },
+        "model:gen_028": {
+          "wins": 13,
+          "losses": 17,
+          "ties": 0,
+          "win_rate": 43.333333333333336
+        },
+        "archetype:lag": {
+          "wins": 22,
+          "losses": 8,
+          "ties": 0,
+          "win_rate": 73.33333333333333
+        }
+      },
+      "archetype:tight": {
+        "model:v3_candidate": {
+          "wins": 14,
+          "losses": 16,
+          "ties": 0,
+          "win_rate": 46.666666666666664
+        },
+        "model:gen_028": {
+          "wins": 14,
+          "losses": 16,
+          "ties": 0,
+          "win_rate": 46.666666666666664
+        },
+        "archetype:lag": {
+          "wins": 21,
+          "losses": 9,
+          "ties": 0,
+          "win_rate": 70.0
+        }
+      },
+      "model:gen_028": {
+        "model:v3_candidate": {
+          "wins": 17,
+          "losses": 13,
+          "ties": 0,
+          "win_rate": 56.666666666666664
+        },
+        "archetype:tight": {
+          "wins": 16,
+          "losses": 14,
+          "ties": 0,
+          "win_rate": 53.333333333333336
+        },
+        "archetype:lag": {
+          "wins": 25,
+          "losses": 5,
+          "ties": 0,
+          "win_rate": 83.33333333333334
+        }
+      },
+      "archetype:lag": {
+        "model:v3_candidate": {
+          "wins": 8,
+          "losses": 22,
+          "ties": 0,
+          "win_rate": 26.666666666666668
+        },
+        "archetype:tight": {
+          "wins": 9,
+          "losses": 21,
+          "ties": 0,
+          "win_rate": 30.0
+        },
+        "model:gen_028": {
+          "wins": 5,
+          "losses": 25,
+          "ties": 0,
+          "win_rate": 16.666666666666664
+        }
+      }
+    }
+  },
+  "certification": {
+    "certified": false,
+    "candidate_id": "model:v3_candidate",
+    "candidate_name": "NextGen_Champion_v3",
+    "criteria": [
+      {
+        "name": "Leaderboard Rank #1",
+        "required": "Standing == 1",
+        "actual": "Standing #2",
+        "passed": false,
+        "detail": "Candidate must achieve Rank 1 overall tournament score (Score: 11.6)"
+      },
+      {
+        "name": "Champion Win Rate Superiority",
+        "required": ">=1.67% (2.0x baseline 0.83%)",
+        "actual": "0.00% (0/30 wins)",
+        "passed": false,
+        "detail": "Candidate champ rate must outperform random field expectation by at least 2.0x"
+      },
+      {
+        "name": "Positive Expected Value (BB/100)",
+        "required": "> +0.0 BB/100",
+        "actual": "+189.43 BB/100",
+        "passed": true,
+        "detail": "Candidate must maintain positive win rate across full preliminary/semifinal/final structure"
+      },
+      {
+        "name": "Top 12 Deep Run Qualification Rate",
+        "required": ">=15.0% (1.5x baseline 10.0%)",
+        "actual": "13.3% (4/30 qualified)",
+        "passed": false,
+        "detail": "Candidate must consistently navigate 200-hand preliminary stage into top 12 playoff"
+      },
+      {
+        "name": "Head-to-Head Pairwise Dominance",
+        "required": "Win rate >= 50.0% against benchmark competitors",
+        "actual": "vs model:gen_028: 43.3%, vs archetype:tight: 53.3%",
+        "passed": false,
+        "detail": "Candidate must win pairwise relative placement matches against benchmark rivals"
+      }
+    ],
+    "summary": "Candidate 'NextGen_Champion_v3' (model:v3_candidate) FAILED 4/5 certification criteria.",
+    "recommendation": "REJECT",
+    "timestamp": "2026-09-12T15:03:13.539402"
+  }
+}

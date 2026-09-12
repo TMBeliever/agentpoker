@@ -4,6 +4,7 @@ from pathlib import Path
 import json, math, os, random, statistics
 from typing import Any
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from .config import TournamentConfig
 from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
 
@@ -111,9 +112,29 @@ def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
     if runs > 1 and len(bbs) > 1:
         var += (.30 / 160.0) ** 2 * (statistics.variance(bbs) / runs)
     se = math.sqrt(max(0.0, var))
+    # Field-size normalized baseline advantage ratios (120-player equilibrium)
+    p_top_base = min(12.0, float(pool)) / max(1.0, float(pool))
+    p_final_base = min(6.0, float(pool)) / max(1.0, float(pool))
+    p_champ_base = 1.0 / max(1.0, float(pool))
+
+    adv_top = (top_rate / p_top_base) if p_top_base > 0 else 1.0
+    adv_final = (final_rate / p_final_base) if p_final_base > 0 else 1.0
+    adv_champ = (champ_rate / p_champ_base) if p_champ_base > 0 else 1.0
+
+    calibrated_fit = (
+        0.20 * min(3.0, adv_top) / 3.0 +
+        0.20 * min(4.0, adv_final) / 4.0 +
+        0.25 * min(5.0, adv_champ) / 5.0 +
+        0.05 * (1.0 - min(avg_rank - 1, pool - 1) / max(1, pool - 1)) +
+        0.30 * bb_factor
+    )
+
     return {
         "top12_rate": top_rate, "final_rate": final_rate, "champion_rate": champ_rate,
         "avg_rank": avg_rank, "avg_bb100": avg_bb, "fitness": fit,
+        "calibrated_fitness": calibrated_fit,
+        "adv_top": adv_top, "adv_final": adv_final, "adv_champ": adv_champ,
+        "expected_top_rate": p_top_base, "expected_final_rate": p_final_base, "expected_champion_rate": p_champ_base,
         "fitness_se": se, "fitness_ci95": [fit - 1.96 * se, fit + 1.96 * se],
         "runs": runs,
     }
@@ -246,7 +267,7 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
     )
 
 class ArenaEvaluator:
-    def __init__(self, pool_size=36, seed=7, equity_samples=0, profiles: dict[str, Any] | str | Path | None = None, workers=0, profile_min_hands=15):
+    def __init__(self, pool_size=120, seed=7, equity_samples=0, profiles: dict[str, Any] | str | Path | None = None, workers=0, profile_min_hands=15):
         self.pool_size=max(12,pool_size); self.seed=seed; self.equity_samples=equity_samples; self.profiles=profiles; self.workers=workers
         self.profile_min_hands=int(profile_min_hands)
 
@@ -330,7 +351,7 @@ class StrategyTrainer:
     """Full population strategy evolution: crossover + mutation + cross-play + racing."""
     FIELDS=tuple(k for k in asdict(StrategyParams()).keys() if k!="equity_samples")
     HALL_SIZE=12
-    def __init__(self, seed=7, pool_size=36, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25,
+    def __init__(self, seed=7, pool_size=120, equity_samples=0, workers=0, profiles: dict[str, Any] | str | Path | None = None, holdout_frac=0.25,
                  profile_min_hands=15, profile_share=0.5, profile_top: int | None = None, self_play: bool = False, shadow_clones: int = 2):
         self.rng=random.Random(seed); self.seed=seed; self.pool_size=max(12,pool_size); self.equity_samples=equity_samples; self.workers=workers
         self.profiles=profiles
@@ -425,9 +446,11 @@ class StrategyTrainer:
     }
 
     def _clamp_and_validate(self, d: dict[str, Any]) -> None:
+        defaults = asdict(StrategyParams())
         for k in self.FIELDS:
             lo, hi = self.PARAM_BOUNDS.get(k, (0.01, 0.99))
-            d[k] = max(lo, min(hi, float(d[k])))
+            val = float(d[k]) if k in d else float(defaults.get(k, 0.5))
+            d[k] = max(lo, min(hi, val))
         # Enforce poker logical monotonicity invariants
         d["thin_value_threshold"] = min(d["thin_value_threshold"], d["value_threshold"] - 0.04)
         d["jam_threshold"] = max(d["jam_threshold"], d["value_threshold"] + 0.06)

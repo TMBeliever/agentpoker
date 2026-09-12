@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse, os, json
 from pathlib import Path
+from .config import TournamentConfig
 from .strategy import StrategyAgent
 from .training import StrategyTrainer, ArenaEvaluator, ARCHETYPES
 from .tournament import LeagueSimulator, SimAgent
@@ -93,23 +94,24 @@ def run_connect(base_url: str = "https://poker.bang.sohu.com") -> None:
 
 def main():
     p=argparse.ArgumentParser(prog='agentpoker'); sub=p.add_subparsers(dest='cmd',required=True)
+    default_field = TournamentConfig.official_120().field_size
     s=sub.add_parser('simulate',help='快速模拟：让 N 个原型 bot 打一场锦标赛看结果分布（不训练）')
-    s.add_argument('--agents',type=int,default=36,help='参赛人数（默认 36）')
+    s.add_argument('--agents',type=int,default=default_field,help=f'参赛人数（默认 {default_field}，官方正赛规模）')
     s.add_argument('--runs',type=int,default=10,help='模拟场数（默认 10）')
     s.add_argument('--seed',type=int,default=7,help='随机种子，同种子结果可复现')
     t=sub.add_parser('train',help='进化训练：逐代演化策略参数，产出冠军模型')
     t.add_argument('--track',choices=['universal','targeted'],default=None,help='训练轨：universal=通用原型池（泛化好）；targeted=真实画像特训（贴合当前赛场）。不指定时：有 --profiles 走 targeted，否则 universal')
-    t.add_argument('--generations',type=int,default=10,help='训练代数。每代耗时取决于 --runs 和 --agents（8核16候选：36人×120场约9分钟，96人×120场约15分钟）')
+    t.add_argument('--generations',type=int,default=10,help='训练代数。每代耗时取决于 --runs 和 --agents')
     t.add_argument('--population',type=int,default=16,help='每代候选策略数量，越大探索越广，但每代耗时线性增加')
-    t.add_argument('--runs',type=int,default=30,help='每个候选评估的锦标赛场数。这是噪声的主要来源：30 场时标准误约 ±0.07，建议正式训练用 >=120')
+    t.add_argument('--runs',type=int,default=30,help='每个候选评估的锦标赛场数。建议正式训练用 >=120')
     t.add_argument('--final-race',type=int,default=200,help='最终在留出集上验证冠军的场数，决定最后报告的 fitness 有多可信')
-    t.add_argument('--agents',type=int,default=36,help='每场锦标赛参赛人数，建议对齐真实赛场规模（如真实 100 人就设 96）')
+    t.add_argument('--agents',type=int,default=default_field,help=f'每场锦标赛参赛人数，对齐真实赛场规模（默认 {default_field}）')
     t.add_argument('--equity-samples',type=int,default=0,help='胜率蒙特卡洛采样数：0=用离线标定表查表（快，训练推荐）；>0=实时精确采样（更准但慢很多）')
     t.add_argument('--workers',type=int,default=0,help='并发进程数，0=自动（最多 8 核）')
     t.add_argument('--profiles',default=None,help='对手画像文件路径。targeted 轨默认 models/opponent_profiles.json')
     t.add_argument('--mix-profiles',dest='mix_profiles',action='store_true',help='通用训练中混入优质真实画像（与原型共同组成对手池）。不加则保持纯原型训练')
     t.add_argument('--profile-min-hands',type=int,default=100,help='画像质量门槛：手数低于此值不采用，用于剔除小样本噪声画像（默认 100 手）')
-    t.add_argument('--profile-top',type=int,default=None,help='只选取手牌数排名前 N 的优质画像（如 36 位主力）')
+    t.add_argument('--profile-top',type=int,default=None,help='只选取手牌数排名前 N 的优质画像')
     t.add_argument('--profile-share',type=float,default=0.5,help='画像在对手池中最多占的座位比例，其余留给原型+种群+名人堂（默认 0.5，即画像最多占一半）')
     t.add_argument('--save',default=None,help='冠军模型输出路径')
     t.add_argument('--archive',default=None,help='各代存档目录，用于断点续训')
@@ -122,7 +124,7 @@ def main():
     e=sub.add_parser('evaluate',help='离线评估：让指定模型跟真实画像打 N 场锦标赛，看泛化表现（不上真实赛场）')
     e.add_argument('--strategy',default='models/champion.json',help='要评估的模型文件路径')
     e.add_argument('--runs',type=int,default=500,help='评估场数。场数越多置信区间越窄，500 场时标准误约 ±0.016')
-    e.add_argument('--agents',type=int,default=36,help='对手池人数，建议对齐真实赛场规模')
+    e.add_argument('--agents',type=int,default=default_field,help=f'对手池人数，建议对齐真实赛场规模（默认 {default_field}）')
     e.add_argument('--equity-samples',type=int,default=0,help='胜率采样数：0=查表（快）；>0=实时精确采样（准但慢）')
     e.add_argument('--profiles',default=None,help='对手画像文件，指定后对手来自真实选手而非原型')
     e.add_argument('--workers',type=int,default=0,help='并发进程数，0=自动')
@@ -157,14 +159,17 @@ def main():
     bt.add_argument('--models',nargs='*',default=None,help='参赛模型文件路径列表 (如 models/champion.json models/archive_universal/gen_004.json)')
     bt.add_argument('--archetypes',nargs='*',default=None,help='参赛内置原型 Bot 列表 (如 tight lag maniac nit station balanced)')
     bt.add_argument('--profiles',nargs='*',default=None,help='参赛真实玩家 agent_id 列表 (如 agent_2b330360a0882e97)')
-    bt.add_argument('--opponents',choices=['mix','profiles','archetypes'],default=None,help='陪练对手池来源: mix=混合池, profiles=纯真实画像, archetypes=纯原型Bot')
+    bt.add_argument('--opponents',choices=['pyramid','mix','profiles','archetypes','sharks','fish'],default='pyramid',help='陪练对手池来源: pyramid=金字塔生态(30%鲨鱼+40%常规+30%鱼, 默认), mix=混合池, profiles=纯真实画像, archetypes=纯原型Bot, sharks=全鲨鱼压测, fish=全鱼收割测试')
     bt.add_argument('--profiles-file',default='models/opponent_profiles.json',help='对手画像文件路径')
     bt.add_argument('--runs',type=int,default=None,help='擂台锦标赛场数 (默认 20)')
-    bt.add_argument('--agents',type=int,default=36,help='每场锦标赛总人数，6的倍数 (默认 36)')
+    bt.add_argument('--agents',type=int,default=default_field,help=f'每场锦标赛总人数，6的倍数 (默认 {default_field})')
     bt.add_argument('--equity-samples',type=int,default=0,help='胜率采样数 (默认 0 查表)')
     bt.add_argument('--workers',type=int,default=0,help='并发进程数 (0 为自动多核)')
     bt.add_argument('--seed',type=int,default=42,help='随机数种子')
     bt.add_argument('--save-report',default=None,help='将完整战报与矩阵保存为 JSON 文件')
+    bt.add_argument('--certify',action='store_true',help='执行冠军认证门禁 (Champion Certification Gate)')
+    bt.add_argument('--candidate',default=None,help='指定参与认证的候选选手 CID、模型名称或路径')
+    bt.add_argument('--promote',action='store_true',help='认证通过后自动晋升为 models/champion.json (带时间戳备份)')
     dash=sub.add_parser('dashboard',help='启动全能轻量级可视化 Web 控制台 (训练、比赛、换桌、战报复盘)')
     dash.add_argument('--port',type=int,default=8080,help='控制台监听端口，默认 8080')
     dash.add_argument('--host',default='0.0.0.0',help='监听地址，0.0.0.0 支持远程服务器访问')
@@ -358,7 +363,7 @@ def main():
 
             opp_mode = args.opponents or 'mix'
             runs = args.runs or 20
-            field_size = args.agents or 36
+            field_size = args.agents or TournamentConfig.official_120().field_size
 
         arena = ArenaBattle(
             competitors=chosen,
@@ -371,6 +376,20 @@ def main():
         )
         report = arena.run(runs=runs, verbose=True)
         print_battle_report(report)
+
+        if getattr(args, 'certify', False):
+            from .battle import certify_champion, print_certification_card, promote_champion
+            cert_res = certify_champion(report, candidate_cid=getattr(args, 'candidate', None))
+            print_certification_card(cert_res)
+            if getattr(args, 'promote', False):
+                if cert_res.certified:
+                    cand_obj = next((c for c in chosen if c.cid == cert_res.candidate_id or c.name == cert_res.candidate_name), None)
+                    if cand_obj and cand_obj.source and Path(cand_obj.source).exists():
+                        promote_champion(cand_obj.source, certification_result=cert_res)
+                    else:
+                        print(f"无法自动晋升: 候选选手 '{cert_res.candidate_name}' 无有效本地文件源")
+                else:
+                    print(f"拒绝晋升: 候选选手未通过冠军认证门禁 ({cert_res.recommendation})")
 
         if args.save_report:
             p = Path(args.save_report)

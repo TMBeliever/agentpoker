@@ -1,0 +1,158 @@
+{
+  "report": {
+    "runs": 50,
+    "field_size": 120,
+    "opponent_mode": "pyramid",
+    "leaderboard": [
+      {
+        "cid": "model:prod_v2",
+        "name": "Production_Champion_V2",
+        "category": "model",
+        "champ_count": 0,
+        "champ_rate": 0.0,
+        "champ_se": 0.0,
+        "final_count": 4,
+        "final_rate": 0.08,
+        "final_se": 0.03836665218650176,
+        "top12_count": 9,
+        "top12_rate": 0.18,
+        "top12_se": 0.054332310828824504,
+        "avg_rank": 49.28,
+        "avg_bb100": 313.7123300970875,
+        "bb_se": 144.05621573293152,
+        "total_hands": 10300,
+        "score": 12.637964316807146,
+        "standing": 1
+      },
+      {
+        "cid": "model:gen_028",
+        "name": "Legacy_Gen_028",
+        "category": "model",
+        "champ_count": 0,
+        "champ_rate": 0.0,
+        "champ_se": 0.0,
+        "final_count": 2,
+        "final_rate": 0.04,
+        "final_se": 0.027712812921102035,
+        "top12_count": 8,
+        "top12_rate": 0.16,
+        "top12_se": 0.05184592558726288,
+        "avg_rank": 39.06,
+        "avg_bb100": 222.1779354207437,
+        "bb_se": 103.62512076950308,
+        "total_hands": 10220,
+        "score": 11.76737608151303,
+        "standing": 2
+      },
+      {
+        "cid": "archetype:lag",
+        "name": "bot_lag",
+        "category": "archetype",
+        "champ_count": 1,
+        "champ_rate": 0.02,
+        "champ_se": 0.01979898987322333,
+        "final_count": 2,
+        "final_rate": 0.04,
+        "final_se": 0.027712812921102035,
+        "top12_count": 4,
+        "top12_rate": 0.08,
+        "top12_se": 0.03836665218650176,
+        "avg_rank": 68.24,
+        "avg_bb100": -163.2280571992111,
+        "bb_se": 79.74853678321759,
+        "total_hands": 10140,
+        "score": 5.457864374321705,
+        "standing": 3
+      }
+    ],
+    "h2h_matrix": {
+      "model:prod_v2": {
+        "model:gen_028": {
+          "wins": 22,
+          "losses": 28,
+          "ties": 0,
+          "win_rate": 44.0
+        },
+        "archetype:lag": {
+          "wins": 35,
+          "losses": 15,
+          "ties": 0,
+          "win_rate": 70.0
+        }
+      },
+      "model:gen_028": {
+        "model:prod_v2": {
+          "wins": 28,
+          "losses": 22,
+          "ties": 0,
+          "win_rate": 56.00000000000001
+        },
+        "archetype:lag": {
+          "wins": 37,
+          "losses": 13,
+          "ties": 0,
+          "win_rate": 74.0
+        }
+      },
+      "archetype:lag": {
+        "model:prod_v2": {
+          "wins": 15,
+          "losses": 35,
+          "ties": 0,
+          "win_rate": 30.0
+        },
+        "model:gen_028": {
+          "wins": 13,
+          "losses": 37,
+          "ties": 0,
+          "win_rate": 26.0
+        }
+      }
+    }
+  },
+  "certification": {
+    "certified": false,
+    "candidate_id": "model:prod_v2",
+    "candidate_name": "Production_Champion_V2",
+    "criteria": [
+      {
+        "name": "Leaderboard Rank #1",
+        "required": "Standing == 1",
+        "actual": "Standing #1",
+        "passed": true,
+        "detail": "Candidate must achieve Rank 1 overall tournament score (Score: 12.6)"
+      },
+      {
+        "name": "Champion Win Rate Superiority",
+        "required": ">=1.25% (1.5x baseline 0.83%)",
+        "actual": "0.00% (0/50 wins)",
+        "passed": false,
+        "detail": "Candidate champ rate must outperform random field expectation by at least 1.5x"
+      },
+      {
+        "name": "Positive Expected Value (BB/100)",
+        "required": "> +0.0 BB/100",
+        "actual": "+313.71 BB/100",
+        "passed": true,
+        "detail": "Candidate must maintain positive win rate across full preliminary/semifinal/final structure"
+      },
+      {
+        "name": "Top 12 Deep Run Qualification Rate",
+        "required": ">=15.0% (1.5x baseline 10.0%)",
+        "actual": "18.0% (9/50 qualified)",
+        "passed": true,
+        "detail": "Candidate must consistently navigate 200-hand preliminary stage into top 12 playoff"
+      },
+      {
+        "name": "Head-to-Head Pairwise Dominance",
+        "required": "Win rate >= 50.0% against benchmark competitors",
+        "actual": "vs model:gen_028: 44.0%",
+        "passed": false,
+        "detail": "Candidate must win pairwise relative placement matches against benchmark rivals"
+      }
+    ],
+    "summary": "Candidate 'Production_Champion_V2' (model:prod_v2) FAILED 2/5 certification criteria.",
+    "recommendation": "REJECT",
+    "timestamp": "2026-09-12T15:06:45.261658"
+  }
+}

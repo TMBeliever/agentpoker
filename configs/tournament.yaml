@@ -1,8 +1,14 @@
+# Official AgentPoker 120-Player Tournament Specification
+field_size: 120
 small_blind: 100
 big_blind: 200
-seats: 6
+starting_stack_bb: 100
+seats_per_table: 6
 preliminary_rounds: 10
 hands_per_round: 20
-minimum_completion: 0.80
+min_completion_rate: 0.80
+semifinal_qualifiers: 12
+semifinal_tables: 2
 semifinal_hands: 20
+final_qualifiers: 6
 final_hands: 30

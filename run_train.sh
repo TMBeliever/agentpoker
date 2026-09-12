@@ -19,7 +19,7 @@
 #   FINAL_RACE          最终在留出集上验证冠军的场数（默认 500），决定报告数字的可信度
 #
 # --- 赛场规模 ---
-#   AGENTS              每场锦标赛参赛人数（默认 36）。建议对齐真实赛场规模
+#   AGENTS              每场锦标赛参赛人数（默认 120）。对齐真实 120 人正赛规模
 #
 # --- 性能 ---
 #   WORKERS             并发进程数，默认取 CPU 核数
@@ -48,7 +48,7 @@ uv run python -m agentpoker.cli train \
   --generations "${GENERATIONS:-30}" \
   --population "${POPULATION:-16}" \
   --runs "${RUNS_PER_CANDIDATE:-120}" \
-  --agents "${AGENTS:-36}" \
+  --agents "${AGENTS:-120}" \
   --workers "${WORKERS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}" \
   --final-race "${FINAL_RACE:-500}" \
   --reeval-runs "${REEVAL_RUNS:-60}" \

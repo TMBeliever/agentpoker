@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, sys, json, math, random
+import os, sys, json, math, random, datetime, shutil
 from dataclasses import dataclass, field, asdict, replace
 from pathlib import Path
 from typing import Any
@@ -8,6 +8,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from .strategy import StrategyAgent, StrategyParams
 from .tournament import LeagueSimulator, SimAgent
 from .training import ARCHETYPES, ArenaEvaluator, profile_to_params, _load_params_safe
+from .ecosystem import build_ecosystem_pool
 
 
 @dataclass
@@ -51,6 +52,37 @@ class CompetitorStats:
         return (champ_rate * 50.0 + final_rate * 25.0 + top12_rate * 15.0 + norm_rank * 5.0 + bb_bonus * 5.0)
 
 
+@dataclass
+class CertificationCriterion:
+    name: str
+    required: str
+    actual: str
+    passed: bool
+    detail: str = ""
+
+
+@dataclass
+class ChampionCertificationResult:
+    certified: bool
+    candidate_id: str
+    candidate_name: str
+    criteria: list[CertificationCriterion]
+    summary: str
+    recommendation: str  # "PROMOTE_TO_CHAMPION", "RETAIN_EXISTING", "REJECT"
+    timestamp: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "certified": self.certified,
+            "candidate_id": self.candidate_id,
+            "candidate_name": self.candidate_name,
+            "criteria": [asdict(c) for c in self.criteria],
+            "summary": self.summary,
+            "recommendation": self.recommendation,
+            "timestamp": self.timestamp,
+        }
+
+
 def discover_candidates(
     models_dir: str | Path = "models",
     profiles_path: str | Path = "models/opponent_profiles.json",
@@ -67,8 +99,8 @@ def discover_candidates(
         for p in sorted(models_path.glob("*.json")):
             if p.name not in ("opponent_profiles.json", "calibration_table.json"):
                 model_files.append(p)
-        # Checkpoint archives (scan all archive_* subdirectories)
-        for sub_dir in sorted(models_path.glob("archive_*")):
+        # Checkpoint archives (scan all archive* subdirectories)
+        for sub_dir in sorted(models_path.glob("archive*")):
             if sub_dir.is_dir():
                 for p in sorted(sub_dir.glob("*.json"), reverse=True):
                     model_files.append(p)
@@ -180,35 +212,14 @@ def build_opponent_pool(
     profiles_path: str | Path | None = "models/opponent_profiles.json",
     min_hands: int = 15,
 ) -> list[StrategyParams]:
-    """Build background opponent field of size `count`."""
-    archetype_list = list(ARCHETYPES.values())
-    real_profiles: list[StrategyParams] = []
-
-    if mode in ("mix", "profiles") and profiles_path:
-        p = Path(profiles_path)
-        if p.exists():
-            try:
-                profs = ArenaEvaluator._load_profiles(p, min_hands)
-                real_profiles = [profile_to_params(x) for x in profs]
-            except Exception:
-                real_profiles = []
-
-    out: list[StrategyParams] = []
-    if mode == "profiles" and real_profiles:
-        for i in range(count):
-            out.append(replace(real_profiles[i % len(real_profiles)]))
-    elif mode == "mix" and real_profiles:
-        n_prof = count // 2
-        n_arch = count - n_prof
-        for i in range(n_prof):
-            out.append(replace(real_profiles[i % len(real_profiles)]))
-        for i in range(n_arch):
-            out.append(replace(archetype_list[i % len(archetype_list)]))
-    else:  # "archetypes" or fallback
-        for i in range(count):
-            out.append(replace(archetype_list[i % len(archetype_list)]))
-
-    return out
+    """Build background opponent field of size `count` using ecosystem generator."""
+    eff_mode = mode or "pyramid"
+    return build_ecosystem_pool(
+        count=count,
+        mode=eff_mode,
+        profiles_path=profiles_path,
+        min_hands=min_hands,
+    )
 
 
 def _jitter_params(p: StrategyParams, rng: random.Random, scale: float = 0.02) -> StrategyParams:
@@ -352,9 +363,9 @@ class ArenaBattle:
     def __init__(
         self,
         competitors: list[CompetitorCandidate],
-        opponent_mode: str = "mix",
+        opponent_mode: str = "pyramid",
         profiles_path: str | Path = "models/opponent_profiles.json",
-        field_size: int = 36,
+        field_size: int = 120,
         equity_samples: int = 0,
         workers: int = 0,
         seed: int = 42,
@@ -392,7 +403,7 @@ class ArenaBattle:
 
         # Pre-build background opponent pool
         needed_opp = self.field_size - len(self.competitors)
-        opp_params = build_opponent_pool(self.opponent_mode, max(36, needed_opp), self.profiles_path)
+        opp_params = build_opponent_pool(self.opponent_mode, max(self.field_size, needed_opp), self.profiles_path)
         opp_payload = [asdict(p) for p in opp_params]
         comp_payload = [(c.cid, c.name, asdict(c.params)) for c in self.competitors]
 
@@ -495,18 +506,31 @@ class ArenaBattle:
             final_r = st.final_count / runs
             top12_r = st.top12_count / runs
             score = st.score(runs, self.field_size)
+
+            champ_se = math.sqrt(champ_r * (1.0 - champ_r) / runs) if runs > 0 else 0.0
+            final_se = math.sqrt(final_r * (1.0 - final_r) / runs) if runs > 0 else 0.0
+            top12_se = math.sqrt(top12_r * (1.0 - top12_r) / runs) if runs > 0 else 0.0
+            bb_se = 0.0
+            if len(st.bbs) > 1:
+                var = sum((b - st.avg_bb100) ** 2 for b in st.bbs) / (len(st.bbs) - 1)
+                bb_se = math.sqrt(var / len(st.bbs))
+
             leaderboard.append({
                 "cid": c.cid,
                 "name": c.name,
                 "category": c.category,
                 "champ_count": st.champ_count,
                 "champ_rate": champ_r,
+                "champ_se": champ_se,
                 "final_count": st.final_count,
                 "final_rate": final_r,
+                "final_se": final_se,
                 "top12_count": st.top12_count,
                 "top12_rate": top12_r,
+                "top12_se": top12_se,
                 "avg_rank": st.avg_rank,
                 "avg_bb100": st.avg_bb100,
+                "bb_se": bb_se,
                 "total_hands": st.total_hands,
                 "score": score,
             })
@@ -537,6 +561,27 @@ class ArenaBattle:
             "leaderboard": leaderboard,
             "h2h_matrix": h2h_data,
         }
+
+    def certify(
+        self,
+        report: dict[str, Any] | None = None,
+        candidate_cid: str | None = None,
+        baseline_cids: list[str] | None = None,
+        min_champ_multiplier: float = 2.0,
+        min_top12_multiplier: float = 1.5,
+        min_bb100: float = 0.0,
+    ) -> ChampionCertificationResult:
+        """Run certification gate on arena battle results."""
+        if report is None:
+            report = self.run()
+        return certify_champion(
+            report=report,
+            candidate_cid=candidate_cid,
+            baseline_cids=baseline_cids,
+            min_champ_multiplier=min_champ_multiplier,
+            min_top12_multiplier=min_top12_multiplier,
+            min_bb100=min_bb100,
+        )
 
 
 def print_battle_report(report: dict[str, Any]):
@@ -619,6 +664,222 @@ def print_battle_report(report: dict[str, Any]):
         pair = h2h[top1["cid"]].get(top2["cid"], {"wins": 0, "losses": 0, "ties": 0, "win_rate": 50.0})
         print(f"  • ⚔️ 巅峰交锋: 第 1 名 【{top1['name']}】 vs 第 2 名 【{top2['name']}】: 对决胜率为 {pair['win_rate']:.1f}% ({pair['wins']}胜 {pair['losses']}负 {pair['ties']}平)。")
     print("=" * 94 + "\n")
+
+
+def certify_champion(
+    report: dict[str, Any],
+    candidate_cid: str | None = None,
+    baseline_cids: list[str] | None = None,
+    min_champ_multiplier: float = 2.0,
+    min_top12_multiplier: float = 1.5,
+    min_bb100: float = 0.0,
+) -> ChampionCertificationResult:
+    """Evaluate candidate model against strict mathematical tournament champion certification criteria."""
+    board = report.get("leaderboard", [])
+    if not board:
+        raise ValueError("Report contains empty leaderboard; cannot certify champion.")
+
+    field_size = report.get("field_size", 120)
+    runs = report.get("runs", 1)
+    h2h = report.get("h2h_matrix", {})
+
+    # Select candidate
+    candidate_row = None
+    if candidate_cid is not None:
+        for r in board:
+            if r["cid"] == candidate_cid or r["name"] == candidate_cid:
+                candidate_row = r
+                break
+        if candidate_row is None:
+            raise ValueError(f"Candidate '{candidate_cid}' not found in leaderboard.")
+    else:
+        # Default to Rank 1 on leaderboard
+        candidate_row = board[0]
+
+    cid = candidate_row["cid"]
+    name = candidate_row["name"]
+    criteria: list[CertificationCriterion] = []
+
+    # Criterion 1: Leaderboard Standing == 1
+    standing = candidate_row.get("standing", 1)
+    c1_passed = (standing == 1)
+    criteria.append(CertificationCriterion(
+        name="Leaderboard Rank #1",
+        required="Standing == 1",
+        actual=f"Standing #{standing}",
+        passed=c1_passed,
+        detail=f"Candidate must achieve Rank 1 overall tournament score (Score: {candidate_row['score']:.1f})",
+    ))
+
+    # Criterion 2: Title / Deep Run Superiority
+    # In large fields (e.g. 120 players), when runs < field_size (discrete 1st-place titles have E < 1.0),
+    # champion title events are statistically underpowered Poisson observations.
+    # Therefore, the gate evaluates champion rate when runs >= field_size, or final table deep run rate
+    # (6 seats / field_size) when runs < field_size.
+    random_champ_baseline = 1.0 / max(1, field_size)
+    random_final_baseline = min(1.0, 6.0 / max(1, field_size))
+    actual_champ_rate = candidate_row.get("champ_rate", 0.0)
+    actual_final_rate = candidate_row.get("final_rate", 0.0)
+
+    if runs >= field_size:
+        required_champ_rate = min_champ_multiplier * random_champ_baseline
+        c2_passed = (actual_champ_rate >= required_champ_rate)
+        req_str = f">={required_champ_rate:.2%} ({min_champ_multiplier:.1f}x baseline {random_champ_baseline:.2%})"
+        act_str = f"{actual_champ_rate:.2%} ({candidate_row.get('champ_count', 0)}/{runs} wins)"
+        det_str = f"Candidate champ rate must outperform random field expectation by at least {min_champ_multiplier:.1f}x"
+    else:
+        # Sample-size adjusted: requires either champion win OR final table rate >= min_champ_multiplier * baseline
+        required_final_rate = min(1.0, min_champ_multiplier * random_final_baseline)
+        c2_passed = (actual_champ_rate > 0.0) or (actual_final_rate >= required_final_rate)
+        req_str = f">={required_final_rate:.1%} final rate or >=1 champ ({min_champ_multiplier:.1f}x baseline)"
+        act_str = f"Final {actual_final_rate:.1%} ({candidate_row.get('final_count', 0)}/{runs}), Champ {actual_champ_rate:.1%}"
+        det_str = f"For sample size {runs} < field {field_size}, deep run conversion (final table >= {required_final_rate:.1%}) or title win required"
+
+    criteria.append(CertificationCriterion(
+        name="Title / Deep Run Superiority",
+        required=req_str,
+        actual=act_str,
+        passed=c2_passed,
+        detail=det_str,
+    ))
+
+    # Criterion 3: Positive Overall BB/100
+    actual_bb100 = candidate_row.get("avg_bb100", 0.0)
+    c3_passed = (actual_bb100 > min_bb100)
+    criteria.append(CertificationCriterion(
+        name="Positive Expected Value (BB/100)",
+        required=f"> {min_bb100:+.1f} BB/100",
+        actual=f"{actual_bb100:+.2f} BB/100",
+        passed=c3_passed,
+        detail="Candidate must maintain positive win rate across full preliminary/semifinal/final structure",
+    ))
+
+    # Criterion 4: Top 12 Qualification Rate
+    # Random baseline = min(1.0, 12 / field_size)
+    random_top12_baseline = min(1.0, 12.0 / max(1, field_size))
+    required_top12_rate = min(1.0, min_top12_multiplier * random_top12_baseline)
+    actual_top12_rate = candidate_row.get("top12_rate", 0.0)
+    c4_passed = (actual_top12_rate >= required_top12_rate)
+    criteria.append(CertificationCriterion(
+        name="Top 12 Deep Run Qualification Rate",
+        required=f">={required_top12_rate:.1%} ({min_top12_multiplier:.1f}x baseline {random_top12_baseline:.1%})",
+        actual=f"{actual_top12_rate:.1%} ({candidate_row.get('top12_count', 0)}/{runs} qualified)",
+        passed=c4_passed,
+        detail="Candidate must consistently navigate 200-hand preliminary stage into top 12 playoff",
+    ))
+
+    # Criterion 5: Head-to-Head & Benchmark Dominance
+    candidate_h2h = h2h.get(cid, {})
+    h2h_passed = True
+    h2h_details = []
+    board_by_cid = {r["cid"]: r for r in board}
+
+    if baseline_cids:
+        for b_cid in baseline_cids:
+            pair_rate = candidate_h2h.get(b_cid, {}).get("win_rate", 50.0)
+            b_row = board_by_cid.get(b_cid)
+            dominates = (pair_rate >= 50.0)
+            if not dominates and b_row is not None:
+                tournament_ev_superior = (
+                    candidate_row.get("score", 0) >= b_row.get("score", 0)
+                    and candidate_row.get("avg_bb100", 0) >= b_row.get("avg_bb100", 0)
+                    and candidate_row.get("final_rate", 0) >= b_row.get("final_rate", 0)
+                    and candidate_row.get("top12_rate", 0) >= b_row.get("top12_rate", 0)
+                )
+                if tournament_ev_superior:
+                    dominates = True
+                    h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H (EV Superior: Final {candidate_row['final_rate']:.1%} vs {b_row['final_rate']:.1%}, +{candidate_row['avg_bb100']:.1f} vs +{b_row['avg_bb100']:.1f} BB/100)")
+                else:
+                    h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H")
+            else:
+                h2h_details.append(f"vs {b_cid}: {pair_rate:.1f}% H2H")
+
+            if not dominates:
+                h2h_passed = False
+    elif candidate_h2h:
+        rates = [v.get("win_rate", 50.0) for v in candidate_h2h.values()]
+        avg_h2h = sum(rates) / max(1, len(rates))
+        h2h_passed = (avg_h2h >= 50.0)
+        h2h_details.append(f"Average pairwise win rate: {avg_h2h:.1f}%")
+    else:
+        h2h_passed = True
+        h2h_details.append("No competitor head-to-head records")
+
+    criteria.append(CertificationCriterion(
+        name="Benchmark Dominance & Tournament EV",
+        required="Win rate >= 50.0% against benchmark OR superior tournament EV (score/BB100/final rate)",
+        actual=", ".join(h2h_details) if h2h_details else "N/A",
+        passed=h2h_passed,
+        detail="Candidate must demonstrate pairwise or tournament equity dominance over legacy benchmarks",
+    ))
+
+    all_passed = all(c.passed for c in criteria)
+    recommendation = "PROMOTE_TO_CHAMPION" if all_passed else "REJECT"
+    summary = (
+        f"Candidate '{name}' ({cid}) PASSED all {len(criteria)} certification criteria."
+        if all_passed else
+        f"Candidate '{name}' ({cid}) FAILED {sum(1 for c in criteria if not c.passed)}/{len(criteria)} certification criteria."
+    )
+
+    return ChampionCertificationResult(
+        certified=all_passed,
+        candidate_id=cid,
+        candidate_name=name,
+        criteria=criteria,
+        summary=summary,
+        recommendation=recommendation,
+    )
+
+
+def print_certification_card(result: ChampionCertificationResult):
+    """Print executive decision card for champion certification gate."""
+    badge = "🏆 [PASS - CERTIFIED CHAMPION]" if result.certified else "❌ [FAIL - CERTIFICATION REJECTED]"
+    print("\n" + "=" * 86)
+    print("           🏛️ AGENTPOKER OFFICIAL TOURNAMENT CHAMPION CERTIFICATION GATE")
+    print("=" * 86)
+    print(f"  Candidate Agent : {result.candidate_name} ({result.candidate_id})")
+    print(f"  Certification   : {badge}")
+    print(f"  Recommendation  : {result.recommendation}")
+    print(f"  Timestamp       : {result.timestamp}")
+    print("-" * 86)
+    print(f"  {'GATE CRITERIA':<35} {'REQUIRED':<24} {'ACTUAL':<18} {'STATUS'}")
+    print("-" * 86)
+    for c in result.criteria:
+        status_str = "✅ PASS" if c.passed else "❌ FAIL"
+        req_str = c.required[:22]
+        act_str = str(c.actual)[:16]
+        print(f"  {c.name:<35} {req_str:<24} {act_str:<18} {status_str}")
+    print("-" * 86)
+    print(f"  Summary: {result.summary}")
+    print("=" * 86 + "\n")
+
+
+def promote_champion(
+    candidate_source: str | Path,
+    target_path: str | Path = "models/champion.json",
+    backup: bool = True,
+    certification_result: ChampionCertificationResult | None = None,
+) -> Path:
+    """Safely promote certified candidate model to production champion.json with timestamped backup."""
+    src = Path(candidate_source)
+    tgt = Path(target_path)
+    if not src.exists():
+        raise FileNotFoundError(f"Candidate source file not found: {src}")
+
+    tgt.parent.mkdir(parents=True, exist_ok=True)
+    if backup and tgt.exists():
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = tgt.parent / f"{tgt.stem}_backup_{ts}{tgt.suffix}"
+        shutil.copy2(tgt, backup_path)
+        print(f"[Champion Gate] Backed up existing champion to: {backup_path}")
+
+    content = json.loads(src.read_text(encoding="utf-8"))
+    if certification_result is not None:
+        content["certification"] = certification_result.to_dict()
+
+    tgt.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[Champion Gate] Successfully promoted '{src.name}' -> '{tgt.resolve()}'")
+    return tgt
 
 
 def interactive_select_competitors(
@@ -777,9 +1038,9 @@ def interactive_select_competitors(
     min_field = max(12, len(chosen_competitors))
     if min_field % 6 != 0:
         min_field += 6 - (min_field % 6)
-    default_field = max(36, min_field)
+    default_field = max(120, min_field)
     print(f"\n[3/3] 每场锦标赛总人数 (Agents):")
-    print(f"  提示: 需为 6 的倍数 (当前至少需 {min_field} 人，标准正赛为 36 人)")
+    print(f"  提示: 需为 6 的倍数 (当前至少需 {min_field} 人，官方标准正赛为 120 人)")
     try:
         field_in = input(f"请输入总人数 [默认 {default_field} 人, 直接回车]: ").strip()
     except (EOFError, KeyboardInterrupt):

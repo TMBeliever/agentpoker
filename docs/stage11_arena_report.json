@@ -1,0 +1,169 @@
+{
+  "runs": 20,
+  "field_size": 120,
+  "opponent_mode": "pyramid",
+  "leaderboard": [
+    {
+      "cid": "archetype:tight",
+      "name": "bot_tight",
+      "category": "archetype",
+      "champ_count": 1,
+      "champ_rate": 0.05,
+      "champ_se": 0.04873397172404482,
+      "final_count": 3,
+      "final_rate": 0.15,
+      "final_se": 0.07984359711335656,
+      "top12_count": 4,
+      "top12_rate": 0.2,
+      "top12_se": 0.0894427190999916,
+      "avg_rank": 31.7,
+      "avg_bb100": 364.0034772182254,
+      "bb_se": 156.99412619619577,
+      "total_hands": 4170,
+      "score": 17.92661977899202,
+      "standing": 1
+    },
+    {
+      "cid": "model:gen_028",
+      "name": "models/archive/gen_028.json",
+      "category": "model",
+      "champ_count": 0,
+      "champ_rate": 0.0,
+      "champ_se": 0.0,
+      "final_count": 2,
+      "final_rate": 0.1,
+      "final_se": 0.0670820393249937,
+      "top12_count": 3,
+      "top12_rate": 0.15,
+      "top12_se": 0.07984359711335656,
+      "avg_rank": 42.1,
+      "avg_bb100": 87.46856796116505,
+      "bb_se": 121.54614380476987,
+      "total_hands": 4120,
+      "score": 12.51835964916829,
+      "standing": 2
+    },
+    {
+      "cid": "model:champion_v2",
+      "name": "models/champion_v2.json",
+      "category": "model",
+      "champ_count": 0,
+      "champ_rate": 0.0,
+      "champ_se": 0.0,
+      "final_count": 1,
+      "final_rate": 0.05,
+      "final_se": 0.04873397172404482,
+      "top12_count": 2,
+      "top12_rate": 0.1,
+      "top12_se": 0.0670820393249937,
+      "avg_rank": 46.1,
+      "avg_bb100": 191.38464373464373,
+      "bb_se": 203.47767555898412,
+      "total_hands": 4070,
+      "score": 10.813601689526147,
+      "standing": 3
+    },
+    {
+      "cid": "archetype:lag",
+      "name": "bot_lag",
+      "category": "archetype",
+      "champ_count": 0,
+      "champ_rate": 0.0,
+      "champ_se": 0.0,
+      "final_count": 2,
+      "final_rate": 0.1,
+      "final_se": 0.0670820393249937,
+      "top12_count": 4,
+      "top12_rate": 0.2,
+      "top12_se": 0.0894427190999916,
+      "avg_rank": 64.4,
+      "avg_bb100": 2.339613526570051,
+      "bb_se": 192.12163478809424,
+      "total_hands": 4140,
+      "score": 10.409226539610579,
+      "standing": 4
+    }
+  ],
+  "h2h_matrix": {
+    "model:champion_v2": {
+      "model:gen_028": {
+        "wins": 10,
+        "losses": 10,
+        "ties": 0,
+        "win_rate": 50.0
+      },
+      "archetype:tight": {
+        "wins": 6,
+        "losses": 14,
+        "ties": 0,
+        "win_rate": 30.0
+      },
+      "archetype:lag": {
+        "wins": 12,
+        "losses": 8,
+        "ties": 0,
+        "win_rate": 60.0
+      }
+    },
+    "model:gen_028": {
+      "model:champion_v2": {
+        "wins": 10,
+        "losses": 10,
+        "ties": 0,
+        "win_rate": 50.0
+      },
+      "archetype:tight": {
+        "wins": 8,
+        "losses": 12,
+        "ties": 0,
+        "win_rate": 40.0
+      },
+      "archetype:lag": {
+        "wins": 12,
+        "losses": 8,
+        "ties": 0,
+        "win_rate": 60.0
+      }
+    },
+    "archetype:tight": {
+      "model:champion_v2": {
+        "wins": 14,
+        "losses": 6,
+        "ties": 0,
+        "win_rate": 70.0
+      },
+      "model:gen_028": {
+        "wins": 12,
+        "losses": 8,
+        "ties": 0,
+        "win_rate": 60.0
+      },
+      "archetype:lag": {
+        "wins": 14,
+        "losses": 6,
+        "ties": 0,
+        "win_rate": 70.0
+      }
+    },
+    "archetype:lag": {
+      "model:champion_v2": {
+        "wins": 8,
+        "losses": 12,
+        "ties": 0,
+        "win_rate": 40.0
+      },
+      "model:gen_028": {
+        "wins": 8,
+        "losses": 12,
+        "ties": 0,
+        "win_rate": 40.0
+      },
+      "archetype:tight": {
+        "wins": 6,
+        "losses": 14,
+        "ties": 0,
+        "win_rate": 30.0
+      }
+    }
+  }
+}

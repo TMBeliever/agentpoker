@@ -127,7 +127,9 @@ class NLHEngine:
                             record(p.seat, street, "fold", 0, cause="engine_guard")
                     break
                 live = [p for p in players if not p.folded and not p.all_in]
-                if len(live) <= 1:
+                if not live:
+                    break
+                if len(live) == 1 and live[0].committed_round == current_bet:
                     break
                 p = players[current]
                 if p.folded or p.all_in:
@@ -145,10 +147,11 @@ class NLHEngine:
                 else:
                     legal = {"check": None}
                     open_type = "bet"
+                other_live = [q for q in live if q.seat != p.seat]
                 if p.stack > 0:
                     if p.stack <= to_call:
                         legal["allIn"] = p.stack
-                    else:
+                    elif other_live:
                         min_extra = min(p.stack, to_call + (self.bb if current_bet == 0 else last_raise))
                         if min_extra > to_call:
                             legal[open_type] = (min_extra, p.stack)

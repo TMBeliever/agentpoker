@@ -101,6 +101,14 @@ class OpponentStats:
             "hands": self.hands,
         }
 
+def _extract_spec_range(spec: Any) -> tuple[int, int]:
+    if isinstance(spec, dict):
+        return int(float(spec.get("min", 0))), int(float(spec.get("max", 0)))
+    elif isinstance(spec, (list, tuple)):
+        return int(float(spec[0])), int(float(spec[1]))
+    return 0, 0
+
+
 class StrategyAgent:
     """Competition-specific adaptive poker strategy with exploitative opponent modeling.
 
@@ -265,7 +273,15 @@ class StrategyAgent:
         if active_opp > 1:
             aggression_freq *= (self.params.multiway_decay ** (active_opp - 1))
 
-        # Opponent profile adjustments
+        # Stage awareness variables
+        stage = str(ctx.get("stage") or ("semifinal" if ctx.get("round_no") == 11 else ("final" if ctx.get("round_no") == 12 else "preliminary")))
+        rank = int(ctx.get("rank", 1) or 1)
+        rem_val = max(0, int(ctx.get("hands_remaining", 50) or 50))
+        tot_stage_hands = max(1, int(ctx.get("total_stage_hands", 200) or 200))
+        stage_progress = float(ctx.get("stage_progress") if ctx.get("stage_progress") is not None else max(0.0, min(1.0, 1.0 - rem_val / float(tot_stage_hands))))
+        buf = ctx.get("buffer_bb100")
+
+        # Opponent profile and stage adjustments
         fold_edge = pot_odds - 0.045
         if facing_bet:
             if villain.get("is_nit"):
@@ -274,6 +290,12 @@ class StrategyAgent:
             elif villain.get("is_maniac"):
                 # Maniac bets frequently with air: widen calling threshold
                 fold_edge -= 0.06
+            if stage == "semifinal" and rank == 3:
+                # Bubble protection: fold marginal spots against big bets
+                fold_edge += 0.06
+            elif stage == "final" and rank >= 2:
+                # Winner-take-all: don't overfold when trailing
+                fold_edge -= 0.05
 
         # Fold if facing bet and clearly behind pot odds
         if facing_bet and strength < max(0.16, fold_edge) and self._noise(0.025):
@@ -298,13 +320,25 @@ class StrategyAgent:
             value_cut += 0.04 * (active_opp - 1)
         if villain.get("is_station"):
             # Stations call down with weaker holdings: widen value betting range
+            value_cut -= 0.05
+        if stage == "preliminary" and villain.get("is_station"):
+            # Fish harvesting in preliminary: bet even thinner value
+            value_cut -= 0.03
+        elif stage == "final" and rank >= 2 and stage_progress > 0.4:
+            # Trailing in final table: thin value bet more aggressively
             value_cut -= 0.04
+        elif stage == "preliminary" and rank <= 12 and buf is not None and float(buf) > 15.0 and stage_progress > 0.6:
+            # High safety lead in preliminary: avoid thin marginal spots that could get raised
+            value_cut += 0.04
 
         if strength >= value_cut:
-            size_boost = 1.15 if villain.get("is_station") else 1.0
+            size_boost = 1.25 if villain.get("is_station") else 1.0
+            if stage == "preliminary" and villain.get("is_station"):
+                size_boost = 1.35  # Maximum extraction from preliminary calling stations
             if "raise" in legal and self._should_aggress(self.params.raise_threshold + 0.04 * texture["wetness"], pressure, strength):
                 return self._sized_raise(legal, strength=strength, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
-            if "bet" in legal and self._should_aggress(0.68, pressure, strength):
+            bet_base = 0.95 if villain.get("is_station") else 0.68
+            if "bet" in legal and self._should_aggress(bet_base, pressure, strength):
                 return self._sized_bet(legal, value=True, pressure=pressure, size_mult=size_boost, pot=pot, bb_size=bb_size, street=street, is_cbet=is_cbet, wetness=texture["wetness"])
             if "call" in legal:
                 return {"type": "call"}
@@ -333,15 +367,29 @@ class StrategyAgent:
         bluff_rate = self.params.river_bluff_frequency if street >= 5 else aggression_freq * 0.18
         bluff_rate *= (1.0 + pressure * 0.65)
         if villain.get("is_station"):
-            bluff_rate *= 0.15  # Never bluff a calling station
+            bluff_rate *= 0.05  # Never bluff a calling station
         elif villain.get("fold", 0.52) > 0.58 and active_opp == 1:
             bluff_rate *= 1.35  # High fold equity heads-up
+        if villain.get("is_nit") and active_opp == 1:
+            bluff_rate *= 1.25  # Exploit nits folding tendencies
+
+        if stage == "preliminary":
+            if rank <= 12 and buf is not None and float(buf) > 15.0 and stage_progress > 0.6:
+                bluff_rate *= 0.65  # Protect preliminary qualification cushion
+        elif stage == "semifinal":
+            if rank == 3:
+                bluff_rate *= 0.75  # Bubble preservation
+            elif rank >= 4 and stage_progress > 0.4:
+                bluff_rate *= (1.20 + 0.30 * stage_progress)  # Elimination desperation
+        elif stage == "final":
+            if rank >= 2 and (stage_progress > 0.4 or rem_val <= 15):
+                bluff_rate *= (1.25 + 0.50 * stage_progress)  # Winner-take-all trailing aggression
 
         # River blocker effect: nut flush blocker eliminates opponent's nut hands
         if street >= 5 and has_nut_flush_blocker:
             if villain.get("is_station"):
                 # Maintain disciplined defense: never bluff calling stations even with nut blockers
-                bluff_rate *= 0.10
+                bluff_rate *= 0.05
             else:
                 # River polarized bluff: holding the nut flush blocker makes bluffs much higher equity
                 bluff_rate = max(bluff_rate, min(0.42, self.params.river_bluff_frequency * 2.0 + 0.12))
@@ -363,9 +411,24 @@ class StrategyAgent:
         call_cut = max(0.20, pot_odds * (0.95 - 0.08 * pressure))
         if villain.get("is_maniac"):
             call_cut -= 0.04
+        if villain.get("is_nit"):
+            call_cut += 0.06  # Nit bet indicates high hand strength: fold marginal bluff-catchers
         if street >= 5 and has_nut_flush_blocker and not villain.get("is_nit"):
             # Nut flush blocker makes opponent's river bet polarized air -> widen bluff-catching range
             call_cut -= 0.05
+
+        if stage == "semifinal":
+            if rank == 3:
+                call_cut += 0.07  # Bubble risk premium: require stronger hand to call
+            elif rank >= 4 and (rem_val <= 10 or stage_progress > 0.5):
+                call_cut -= 0.05  # Trailing late: call wider
+        elif stage == "final":
+            if rank >= 2 and (rem_val <= 15 or stage_progress > 0.5):
+                call_cut -= 0.06  # Winner-take-all: call down lighter against leader
+        elif stage == "preliminary":
+            if rank <= 12 and buf is not None and float(buf) > 15.0 and stage_progress > 0.6:
+                call_cut += 0.05  # Protect solid preliminary lead
+
         if "call" in legal and strength >= call_cut:
             return {"type": "call"}
         if "check" in legal:
@@ -393,6 +456,12 @@ class StrategyAgent:
         bb_size = float(obs.get("big_blind", 200) or 200)
         is_opening = call <= bb_size * 1.05 and pot <= 3.5 * bb_size
         ctx = obs.get("context") or {}
+        stage = str(ctx.get("stage") or ("semifinal" if ctx.get("round_no") == 11 else ("final" if ctx.get("round_no") == 12 else "preliminary")))
+        rank = int(ctx.get("rank", 1) or 1)
+        rem_val = max(0, int(ctx.get("hands_remaining", 50) or 50))
+        tot_stage_hands = max(1, int(ctx.get("total_stage_hands", 200) or 200))
+        stage_progress = float(ctx.get("stage_progress") if ctx.get("stage_progress") is not None else max(0.0, min(1.0, 1.0 - rem_val / float(tot_stage_hands))))
+        buf = ctx.get("buffer_bb100")
         table_strength = float(ctx.get("table_strength", 0.0) or 0.0)
 
         # Position analysis
@@ -435,8 +504,24 @@ class StrategyAgent:
 
         if effective_bb <= 12.0:
             # Short-stack push/fold: position threshold and pressure drive shove width
-            push_vpip = (base_pos_thresh * 1.15 + self.params.vpip * 0.35) - 0.10 * pressure + (0.08 if is_steal else 0.0)
-            push_vpip = max(0.06, min(0.85, push_vpip))
+            push_vpip = (base_pos_thresh * 1.15 + self.params.vpip * 0.35) + 0.20 * max(0.0, pressure) - 0.15 * max(0.0, -pressure) + (0.08 if is_steal else 0.0)
+
+            # Stage-specific push/fold logic
+            if stage == "semifinal":
+                if rank == 3:
+                    push_vpip -= 0.08  # Bubble risk aversion: avoid coin-flips in qualifying 3rd
+                elif rank >= 4:
+                    # Trailing ranks 4-6 must double up
+                    push_vpip += 0.12 + 0.15 * stage_progress
+            elif stage == "final":
+                if rank >= 2:
+                    # Winner-take-all: trailing ranks must shove aggressively to catch 1st
+                    push_vpip += 0.10 + 0.18 * stage_progress
+            elif stage == "preliminary":
+                if rank <= 12 and buf is not None and float(buf) > 15.0 and stage_progress > 0.6:
+                    push_vpip -= 0.10  # Safe qualification lead: protect chips
+
+            push_vpip = max(0.06, min(0.90, push_vpip))
             if premium or score >= 1.0 - push_vpip:
                 if "allIn" in legal:
                     return {"type": "allIn"}
@@ -459,8 +544,8 @@ class StrategyAgent:
             vpip_target *= (1.0 + self.params.table_strength_weight * 0.20 * (-table_strength))
 
         # 2. Tournament pressure adjustment: trailing -> widen; leading -> tighten
-        base_pos_thresh *= (1.0 - 0.20 * max(0.0, -pressure)) * (1.0 + 0.18 * max(0.0, pressure))
-        vpip_target *= (1.0 - 0.25 * max(0.0, pressure)) * (1.0 + 0.20 * max(0.0, -pressure))
+        base_pos_thresh *= (1.0 + 0.18 * max(0.0, pressure)) * (1.0 - 0.20 * max(0.0, -pressure))
+        vpip_target *= (1.0 + 0.22 * max(0.0, pressure)) * (1.0 - 0.20 * max(0.0, -pressure))
 
         # 3. Opponent profile adjustment
         if villain.get("is_station"):
@@ -470,10 +555,29 @@ class StrategyAgent:
             base_pos_thresh *= 1.10
             vpip_target *= 1.10
 
+        # 4. Stage-specific preflop adjustments
+        if stage == "semifinal":
+            if rank == 3:
+                base_pos_thresh *= 0.88
+                vpip_target *= 0.88
+            elif rank >= 4 and stage_progress > 0.4:
+                base_pos_thresh *= (1.0 + 0.25 * stage_progress)
+                vpip_target *= (1.0 + 0.25 * stage_progress)
+        elif stage == "final":
+            if rank >= 2 and stage_progress > 0.3:
+                base_pos_thresh *= (1.0 + 0.30 * stage_progress)
+                vpip_target *= (1.0 + 0.30 * stage_progress)
+        elif stage == "preliminary":
+            if rank <= 12 and buf is not None and float(buf) > 15.0 and stage_progress > 0.6:
+                base_pos_thresh *= 0.85
+                vpip_target *= 0.85
+
         vpip_target = max(0.03, min(0.95, vpip_target))
         open_target = max(0.06, min(0.92, base_pos_thresh))
         in_range = premium or score >= 1.0 - vpip_target
         in_open_range = premium or score >= 1.0 - open_target
+
+        preflop_size_mult = 1.30 if (villain.get("is_station") or villain.get("is_passive")) else 1.0
 
         if is_opening:
             if in_open_range and ("raise" in legal or "bet" in legal):
@@ -482,16 +586,19 @@ class StrategyAgent:
                     freq = min(0.98, freq * 1.25)
                 elif villain.get("is_station"):
                     freq *= 0.85
+                if stage == "final" and rank >= 2 and (stage_progress > 0.3 or rem_val <= 15):
+                    freq = min(0.98, freq * 1.20)
                 is_core = premium or score >= 1.0 - open_target * 0.85
                 if is_core or self._noise(freq):
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size)
+                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult)
+            # Passive / Calling Station archetypes enter passively by limping when in_range:
             if in_range and "call" in legal:
-                if pos_tag == "sb" or (call <= bb_size * 1.05 and self._noise(0.90)):
+                if pos_tag == "sb" or callers >= 1 or self.params.open_frequency <= 0.30 or self.params.attack <= 0.40:
                     return {"type": "call"}
             if call == 0 and "check" in legal:
                 return {"type": "check"}
-            if "fold" in legal and not in_range:
+            if "fold" in legal:
                 return {"type": "fold"}
         else:
             # Facing an open raise or 3-bet
@@ -508,13 +615,15 @@ class StrategyAgent:
                     freq *= 1.25
                 elif villain.get("is_station"):
                     freq *= 0.80
+                if stage == "final" and rank >= 2 and (stage_progress > 0.3 or rem_val <= 15):
+                    freq *= 1.35  # Winner-take-all trailing 3-bet aggression
 
                 if premium:
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=True, bb_size=bb_size)
+                    return self._preflop_raise(legal, premium=True, bb_size=bb_size, size_mult=preflop_size_mult)
                 if in_defend and self._noise(freq * (1.0 + 0.35 * max(0.0, pressure))):
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=False, bb_size=bb_size)
+                    return self._preflop_raise(legal, premium=False, bb_size=bb_size, size_mult=preflop_size_mult)
 
             if "call" in legal:
                 if in_defend and (self._noise(0.90) or premium):
@@ -539,17 +648,17 @@ class StrategyAgent:
             return self._sized_bet(legal, pot=pot, bb_size=bb_size, value=premium, pressure=pressure)
         return self._safe_action(legal)
 
-    def _preflop_raise(self, legal: dict[str, Any], premium: bool, bb_size: float = 200.0) -> dict[str, Any]:
+    def _preflop_raise(self, legal: dict[str, Any], premium: bool, bb_size: float = 200.0, size_mult: float = 1.0) -> dict[str, Any]:
         spec = legal.get("raise", legal.get("bet"))
         if not spec:
             return {"type": "allIn"} if "allIn" in legal else {"type": "call"}
-        lo, hi = int(spec[0]), int(spec[1])
+        lo, hi = _extract_spec_range(spec)
         action_type = "raise" if "raise" in legal else "bet"
         if lo >= hi:
             if "allIn" in legal:
                 return {"type": "allIn"}
             return {"type": action_type, "amount": hi}
-        target = int((self.params.open_size + (0.6 if premium else 0.0)) * bb_size)
+        target = int((self.params.open_size * size_mult + (0.6 if premium else 0.0)) * bb_size)
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _equity(self, hero: list[Any], board: list[Any], opponents: int) -> float:
@@ -578,16 +687,29 @@ class StrategyAgent:
             return 0.0
 
         rem_val = max(0, int(rem)) if rem is not None else 50
+        stage = ctx.get("stage") or ("semifinal" if round_no == 11 else ("final" if round_no == 12 else "preliminary"))
+        buf = ctx.get("buffer_bb100")
         pressure = 0.0
 
-        # Semifinal stage (Round 11: 6-max, Top 3 qualify to final table)
-        if round_no == 11:
+        # Semifinal stage (Top 3 per 6-max table qualify to final table)
+        if stage == "semifinal" or round_no == 11:
             if rank <= 3:
-                r4 = ctx.get("rank4_bb100")
-                if r4 is not None and bb is not None and (float(bb) - float(r4)) > 15.0 and rem_val <= 8:
-                    pressure -= self.params.safety * 0.5
+                r4 = ctx.get("rank4_bb100") or ctx.get("cutoff_bb100")
+                margin = buf if buf is not None else ((float(bb) - float(r4)) if (bb is not None and r4 is not None) else 0.0)
+                if rank == 3:
+                    # Rank 3 is right on the bubble: protect qualification, do not over-gamble
+                    if margin > 12.0 and rem_val <= 8:
+                        pressure -= self.params.safety * 0.7
+                    elif margin <= 6.0:
+                        pressure -= self.params.safety * 0.4
+                    else:
+                        pressure -= self.params.safety * 0.2
                 else:
-                    pressure += 0.05
+                    # Rank 1-2: safe cushion
+                    if margin > 18.0 and rem_val <= 8:
+                        pressure -= self.params.safety * 0.6
+                    else:
+                        pressure += 0.05
             else:
                 # Rank 4..6 is currently eliminated! Must attack to qualify
                 pressure += self.params.attack + 0.20
@@ -595,12 +717,13 @@ class StrategyAgent:
                     pressure += (self.params.bubble_aggression - 0.5) * 0.6 + self.params.late_aggression
             return max(-1.0, min(1.0, pressure))
 
-        # Final table stage (Round 12: 6-max, Winner-Take-All for Championship!)
-        if round_no == 12:
+        # Final table stage (6-max, Winner-Take-All for Championship!)
+        if stage == "final" or round_no == 12:
             if rank == 1:
                 # Leading the final table: maintain pressure without reckless punting
-                r2 = ctx.get("rank2_bb100") or ctx.get("second_bb100")
-                if r2 is not None and bb is not None and (float(bb) - float(r2)) > 20.0 and rem_val <= 8:
+                r2 = ctx.get("second_bb100") or ctx.get("rank2_bb100")
+                margin = buf if buf is not None else ((float(bb) - float(r2)) if (bb is not None and r2 is not None) else 0.0)
+                if margin > 20.0 and rem_val <= 8:
                     pressure -= self.params.safety * 0.5
                 else:
                     pressure += 0.10
@@ -614,11 +737,16 @@ class StrategyAgent:
             return max(-1.0, min(1.0, pressure))
 
         # Preliminary stage (Rounds 1-10: 200 hands, Top 12 qualify)
+        tot_h = ctx.get("total_stage_hands", 200)
+        sd_margin = max(3.0, 30.0 * math.sqrt(max(5, rem_val) / float(tot_h)))
         if r12 is not None and bb is not None:
-            # Continuous Qualification Margin: M = (bb - r12) / (sigma * sqrt(H_rem / 200))
-            sd_margin = max(3.0, 30.0 * math.sqrt(max(5, rem_val) / 200.0))
             margin = (float(bb) - float(r12)) / sd_margin
+        elif buf is not None:
+            margin = float(buf) / sd_margin
+        else:
+            margin = None
 
+        if margin is not None:
             if rank <= 12 and margin > 1.0:
                 # Safely inside qualification zone: smooth safety shift to protect stack
                 safety_shift = self.params.safety * min(1.0, 0.45 * margin)
@@ -648,14 +776,16 @@ class StrategyAgent:
         return max(-1.0, min(1.0, pressure))
 
     def _should_aggress(self, base: float, pressure: float, strength: float) -> bool:
-        p = base + 0.15 * max(0.0, pressure) + 0.10 * max(0.0, strength - 0.7)
-        return self._noise(max(0.05, min(0.98, p)))
+        p = base + 0.15 * max(0.0, pressure) + 0.60 * max(0.0, strength - 0.7)
+        if strength >= 0.88:
+            p = max(p, 0.96)
+        return self._noise(max(0.05, min(0.99, p)))
 
     def _sized_raise(self, legal: dict[str, Any], strength: float = 0.5, value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0, wetness: float | None = None) -> dict[str, Any]:
         spec = legal.get("raise", legal.get("bet"))
         if not spec:
             return {"type": "allIn"} if "allIn" in legal else {"type": "call"}
-        lo, hi = map(int, spec)
+        lo, hi = _extract_spec_range(spec)
         action_type = "raise" if "raise" in legal else "bet"
         if lo >= hi:
             if "allIn" in legal:
@@ -681,7 +811,7 @@ class StrategyAgent:
         spec = legal.get("bet", legal.get("raise"))
         if not spec:
             return {"type": "allIn"} if "allIn" in legal else ({"type": "check"} if "check" in legal else {"type": "call"})
-        lo, hi = map(int, spec)
+        lo, hi = _extract_spec_range(spec)
         action_type = "bet" if "bet" in legal else "raise"
         if lo >= hi:
             if "allIn" in legal:

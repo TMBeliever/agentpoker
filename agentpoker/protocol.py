@@ -53,7 +53,8 @@ class AgentPokerClient:
         if r.status_code>=400:
             try:data=r.json(); err=data.get('error',{})
             except Exception:data={}; err={}
-            raise APIError(r.status_code,err.get('code',f'http_{r.status_code}'),err.get('message',r.text[:200]),float(r.headers.get('Retry-After','0') or 0) or None)
+            default_code = 'temporarily_unavailable' if r.status_code in (502, 503, 504) else f'http_{r.status_code}'
+            raise APIError(r.status_code,err.get('code', default_code),err.get('message',r.text[:200]),float(r.headers.get('Retry-After','0') or 0) or None)
         if not r.content: return {}
         try:return r.json()
         except Exception: raise APIError(r.status_code,'invalid_response','non-JSON success response')
@@ -76,12 +77,21 @@ class AgentPokerClient:
     def put_strategy(self,agent_id,text): return self._request('PUT',f'/api/agents/{agent_id}/strategy',{'strategy':text},True)
 
 
-def retry_same(fn, *, max_attempts=None, retry_codes=('temporarily_unavailable',), backoff=1.0):
+def retry_same(fn, *, max_attempts=None, retry_codes=('temporarily_unavailable', 'service_unavailable', 'gateway_timeout'), backoff=1.0):
     n=0
     while True:
-        try:return fn()
+        try:
+            return fn()
+        except requests.RequestException as e:
+            n += 1
+            if max_attempts and n >= max_attempts:
+                raise
+            time.sleep(min(30.0, backoff * (2 ** (n - 1))))
         except APIError as e:
-            n+=1
-            if e.code not in retry_codes: raise
-            if max_attempts and n>=max_attempts: raise
-            time.sleep(e.retry_after if e.retry_after is not None else backoff)
+            n += 1
+            if e.code not in retry_codes and e.status not in (502, 503, 504):
+                raise
+            if max_attempts and n >= max_attempts:
+                raise
+            time.sleep(e.retry_after if e.retry_after is not None else min(30.0, backoff * (2 ** (n - 1))))
+
