@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import asdict, replace
 from pathlib import Path
-import json, math, os, random, statistics
+import json, math, os, random, statistics, time
 from typing import Any
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from .config import TournamentConfig
@@ -138,6 +138,39 @@ def _summarise(top, final, champ, ranks, bbs, runs, pool) -> dict[str, Any]:
         "fitness_se": se, "fitness_ci95": [fit - 1.96 * se, fit + 1.96 * se],
         "runs": runs,
     }
+
+
+def _fmt_eta(seconds: float) -> str:
+    if seconds < 0 or math.isinf(seconds) or math.isnan(seconds):
+        return "--:--"
+    s = int(seconds)
+    hours, remainder = divmod(s, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours > 0:
+        return f"{hours}h {minutes:02d}m"
+    return f"{minutes:02d}m {secs:02d}s"
+
+
+def _evaluate_single_tournament_worker(payload):
+    cand_idx, run_idx, focal, opponents, seed, equity_samples = payload
+    agents = [SimAgent("focal", StrategyAgent(replace(focal, equity_samples=equity_samples), seed=seed, name="focal"))]
+    for i, p in enumerate(opponents):
+        agents.append(SimAgent(f"opp{i}", StrategyAgent(replace(p, equity_samples=equity_samples), seed=seed + 31 * i + 17, name=f"opp{i}")))
+    seeded = []
+    for j, a in enumerate(agents):
+        seeded.append(SimAgent(a.agent_id, StrategyAgent(a.strategy.params, seed=seed + 1000 * j, name=a.agent_id)))
+    sim = LeagueSimulator(seeded, seed=seed)
+    result = sim.run_event()
+    standings = result["preliminary"]
+    me = next(x for x in standings if x.agent_id == "focal")
+    q = {x.agent_id for x in result["qualified"]}
+    f = {x.agent_id for x in result["final"]}
+    is_top12 = int("focal" in q)
+    is_final = int("focal" in f)
+    is_champ = int(bool(result["final"] and result["final"][0].agent_id == "focal"))
+    rank = float(me.rank or len(standings))
+    bb = float(me.bb100 or 0.0)
+    return (cand_idx, run_idx, is_top12, is_final, is_champ, rank, bb)
 
 
 def _evaluate_worker(payload):
@@ -554,29 +587,110 @@ class StrategyTrainer:
         # candidate in the batch, so differences between candidates reflect skill rather
         # than each candidate drawing its own deals and its own opponents.
         if pool is None:
-            pool=self._draw_pool(pop,hall,self.seed*7919+generation,self._train_profile_params)
+            pool = self._draw_pool(pop, hall, self.seed * 7919 + generation, self._train_profile_params)
         if seed_base is None:
-            seed_base=self.seed+generation*1000003
-        tasks=[(p,pool,seed_base,runs,self.equity_samples) for p in pop]
-        workers=self.workers or min(os.cpu_count() or 4, len(tasks))
-        n=len(tasks)
-        print(f"  [{label}] {n} 个候选 × {runs} 场 ({workers} 核并发)...", flush=True)
-        if workers<=1:
-            results=[]
-            for i,(t,p) in enumerate(zip(tasks,pop)):
-                m=_evaluate_worker(t)
-                print(f"    候选 {i+1:02d}/{n:02d} fit={m['fitness']:.4f} top12={m['top12_rate']:.2f} rank={m['avg_rank']:.1f}", flush=True)
-                results.append((m,p))
-            return results
-        results=[None]*len(tasks)
-        completed=0
+            seed_base = self.seed + generation * 1000003
+
+        n_cands = len(pop)
+        total_tournaments = n_cands * runs
+        workers = self.workers or min(os.cpu_count() or 4, total_tournaments)
+        print(f"  [{label} | Gen {generation+1:02d}] 共 {n_cands} 个候选 × {runs} 场锦标赛 = {total_tournaments} 场 (并发: {workers} 核心)...", flush=True)
+
+        cand_data = [
+            {"top": 0, "final": 0, "champ": 0, "ranks": [], "bbs": [], "completed": 0}
+            for _ in range(n_cands)
+        ]
+
+        if workers <= 1:
+            t0 = time.time()
+            for cand_idx, p in enumerate(pop):
+                for r in range(runs):
+                    s = seed_base + r * 7919
+                    _, _, is_top12, is_final, is_champ, rank, bb = _evaluate_single_tournament_worker(
+                        (cand_idx, r, p, pool, s, self.equity_samples)
+                    )
+                    cd = cand_data[cand_idx]
+                    cd["top"] += is_top12; cd["final"] += is_final; cd["champ"] += is_champ
+                    cd["ranks"].append(rank); cd["bbs"].append(bb); cd["completed"] += 1
+                    done = sum(c["completed"] for c in cand_data)
+                    elapsed = time.time() - t0
+                    sec_per_game = elapsed / max(1, done)
+                    eta_sec = (total_tournaments - done) * sec_per_game
+                    eta_str = _fmt_eta(eta_sec)
+                    if done % max(1, min(10, total_tournaments // 20)) == 0 or done == total_tournaments:
+                        pct = done / total_tournaments * 100.0
+                        print(f"    [{label}进度] {done:03d}/{total_tournaments:03d} 场 ({pct:4.1f}%) | 均速 {sec_per_game:.1f}s/场 | 剩余预估: {eta_str}", flush=True)
+
+                m = _summarise(cd["top"], cd["final"], cd["champ"], cd["ranks"], cd["bbs"], runs, self.pool_size)
+                print(f"    ✔ 候选 {cand_idx+1:02d}/{n_cands:02d} fit={m['fitness']:.4f} top12={m['top12_rate']*100:.1f}% final={m['final_rate']*100:.1f}% champ={m['champion_rate']*100:.1f}% avg_rank={m['avg_rank']:.1f} BB/100={m['avg_bb100']:+.1f}", flush=True)
+                cand_data[cand_idx]["summary"] = m
+
+            return [(cand_data[i]["summary"], pop[i]) for i in range(n_cands)]
+
+        # Multiprocessing concurrent mode
+        tasks = []
+        for r in range(runs):
+            s = seed_base + r * 7919
+            for cand_idx, p in enumerate(pop):
+                tasks.append((cand_idx, r, p, pool, s, self.equity_samples))
+
+        t0 = time.time()
+        last_print_time = t0
+        completed_tournaments = 0
+        completed_cands = 0
+        print_interval = max(1, min(10, total_tournaments // 20))
+
         with ProcessPoolExecutor(max_workers=workers) as ex:
-            futs={ex.submit(_evaluate_worker,t):i for i,t in enumerate(tasks)}
+            futs = {ex.submit(_evaluate_single_tournament_worker, t): t for t in tasks}
             for fut in as_completed(futs):
-                idx=futs[fut]; results[idx]=fut.result(); completed+=1
-                m=results[idx]
-                print(f"    候选 {completed:02d}/{n:02d} fit={m['fitness']:.4f} top12={m['top12_rate']:.2f} rank={m['avg_rank']:.1f}", flush=True)
-        return list(zip(results,pop))
+                cand_idx, r_idx, is_top12, is_final, is_champ, rank, bb = fut.result()
+                cd = cand_data[cand_idx]
+                cd["top"] += is_top12
+                cd["final"] += is_final
+                cd["champ"] += is_champ
+                cd["ranks"].append(rank)
+                cd["bbs"].append(bb)
+                cd["completed"] += 1
+                completed_tournaments += 1
+
+                now = time.time()
+                elapsed = now - t0
+                sec_per_game = elapsed / max(1, completed_tournaments)
+                eta_sec = (total_tournaments - completed_tournaments) * sec_per_game
+                eta_str = _fmt_eta(eta_sec)
+
+                if cd["completed"] == runs:
+                    completed_cands += 1
+                    m = _summarise(cd["top"], cd["final"], cd["champ"], cd["ranks"], cd["bbs"], runs, self.pool_size)
+                    cd["summary"] = m
+                    print(
+                        f"    ✔ [{label}完成 候选 {cand_idx+1:02d}/{n_cands:02d}] "
+                        f"fit={m['fitness']:.4f}±{m.get('fitness_se',0.0):.4f} | "
+                        f"出线 {m['top12_rate']*100:4.1f}% | "
+                        f"决赛 {m['final_rate']*100:4.1f}% | "
+                        f"夺冠 {m['champion_rate']*100:4.1f}% | "
+                        f"均排 {m['avg_rank']:4.1f} | "
+                        f"BB/100 {m['avg_bb100']:+5.1f}  "
+                        f"[{completed_cands}/{n_cands} 候选完成]",
+                        flush=True
+                    )
+                    last_print_time = now
+                elif (completed_tournaments % print_interval == 0) or (now - last_print_time >= 15.0):
+                    pct = (completed_tournaments / total_tournaments) * 100.0
+                    bar_len = 16
+                    filled = int(round(bar_len * completed_tournaments / total_tournaments))
+                    bar = "█" * filled + "░" * (bar_len - filled)
+                    print(
+                        f"    [{label}总览] [{bar}] {completed_tournaments:03d}/{total_tournaments:03d} 场 ({pct:4.1f}%) | "
+                        f"速度: {sec_per_game:.1f}s/场 | "
+                        f"剩余预估: {eta_str} | "
+                        f"候选完成: {completed_cands}/{n_cands}",
+                        flush=True
+                    )
+                    last_print_time = now
+
+        results = [(cand_data[i]["summary"], pop[i]) for i in range(n_cands)]
+        return results
 
     def fit(self,generations=30,population=16,runs_per_candidate=30,save="models/champion.json",archive="models/archive",final_race=500,resume=True,reeval_runs=24,
             stagnation_patience=4,stagnation_sigma_boost=2.5,stagnation_min_delta=0.01,resume_revert_margin=0.05,base_model=None):
@@ -701,7 +815,7 @@ class StrategyTrainer:
                 print(f"[Training] 检测到连续 {stagnation_patience} 代无提升，触发多样性重启："
                       f"从历史最优 (fitness={best_ever_metrics['fitness']:.4f}) 重新分裂种群，sigma {base_sigma:.4f}->{sigma:.4f}", flush=True)
 
-            scored=self._score_population(pop,hall,g,runs_per_candidate)
+            scored=self._score_population(pop,hall,g,runs_per_candidate,label="初评")
             ranked=_rank(scored)
             elite_n=max(3,population//4)
             elites=[p for _,p in ranked[:elite_n]]
@@ -711,7 +825,7 @@ class StrategyTrainer:
             # and a fresh seed base before crowning anything.
             re_pool=self._draw_pool(pop,hall,self.seed*104729+g,self._train_profile_params)
             re_scored=self._score_population(elites,hall,g,max(1,reeval_runs),
-                                             pool=re_pool, seed_base=self.seed+77000000+g*1009)
+                                             pool=re_pool, seed_base=self.seed+77000000+g*1009, label="复评")
             re_ranked=_rank(re_scored)
             champion_metrics,champion=re_ranked[0]
             in_sample=dict(ranked[0][0])

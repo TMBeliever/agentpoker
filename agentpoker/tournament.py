@@ -64,12 +64,13 @@ class LeagueSimulator:
     def _context(self, aid, st, round_no, hands_remaining):
         return self._context_map(st, round_no, hands_remaining).get(aid, {})
 
-    def _context_map(self, st, round_no, hands_remaining, table_strength_map=None):
+    def _context_map(self, st, round_no, hands_remaining, table_strength_map=None, active_ids=None):
         """Tournament context for every agent, computed once per hand."""
         rows = self._standings(st)
         r12 = next((x.bb100 for x in rows if x.rank == 12), None)
         r13 = next((x.bb100 for x in rows if x.rank == 13), None)
         ts_map = table_strength_map or {}
+        target_rows = [x for x in rows if x.agent_id in active_ids] if active_ids is not None else rows
         return {
             x.agent_id: build_context(
                 x.rank, x.bb100, r12, r13, hands_remaining, round_no,
@@ -78,7 +79,7 @@ class LeagueSimulator:
                 target_rank=self.config.semifinal_qualifiers,
                 total_stage_hands=self.config.total_preliminary_hands,
             )
-            for x in rows
+            for x in target_rows
         }
 
     def _play_group(self, group, st, round_no, hands_this_round):
@@ -88,6 +89,7 @@ class LeagueSimulator:
         # Table strength metric for Swiss pairing and random rounds (strictly excluding Hero)
         ts_map = TableStrengthModel.compute_table_strength_map(group, st)
 
+        group_set = set(group)
         for hand_i in range(hands_this_round):
             # Check for any busted players before the hand: auto-rebuy 100 BB
             for aid in group:
@@ -98,7 +100,7 @@ class LeagueSimulator:
 
             before = {aid: st[aid]['stack'] for aid in group}
             hands_remaining = self.rounds * self.hpr - (round_no - 1) * self.hpr - hand_i
-            provider = self._context_map(st, round_no, hands_remaining, table_strength_map=ts_map).get
+            provider = self._context_map(st, round_no, hands_remaining, table_strength_map=ts_map, active_ids=group_set).get
             res, dealer = self.engine.play_hand(
                 group,
                 {aid: st[aid]['stack'] for aid in group},
