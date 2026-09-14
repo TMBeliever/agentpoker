@@ -37,20 +37,31 @@ class TournamentConfig:
     final_qualifiers: int = 6
     final_hands: int = 30
     execution_mode: ExecutionMode | None = None
+    progressive_blinds: bool = False
+    blind_schedule: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
-        if self.field_size < self.semifinal_qualifiers:
-            raise ValueError(f"field_size ({self.field_size}) must be >= semifinal_qualifiers ({self.semifinal_qualifiers})")
+        if self.semifinal_tables > 0:
+            if self.field_size < self.semifinal_qualifiers:
+                raise ValueError(f"field_size ({self.field_size}) must be >= semifinal_qualifiers ({self.semifinal_qualifiers})")
+            if self.semifinal_qualifiers != self.semifinal_tables * self.seats_per_table:
+                raise ValueError(f"semifinal_qualifiers ({self.semifinal_qualifiers}) must equal semifinal_tables * seats_per_table")
+        else:
+            if self.field_size < self.final_qualifiers:
+                raise ValueError(f"field_size ({self.field_size}) must be >= final_qualifiers ({self.final_qualifiers})")
         if self.field_size % self.seats_per_table != 0:
             raise ValueError(f"field_size ({self.field_size}) must be divisible by seats_per_table ({self.seats_per_table})")
-        if self.semifinal_qualifiers != self.semifinal_tables * self.seats_per_table:
-            raise ValueError(f"semifinal_qualifiers ({self.semifinal_qualifiers}) must equal semifinal_tables * seats_per_table")
         if self.final_qualifiers != self.seats_per_table:
             raise ValueError(f"final_qualifiers ({self.final_qualifiers}) must equal seats_per_table ({self.seats_per_table})")
         if not (0.0 < self.min_completion_rate <= 1.0):
             raise ValueError(f"min_completion_rate ({self.min_completion_rate}) must be in (0.0, 1.0]")
         if self.small_blind <= 0 or self.big_blind <= self.small_blind:
             raise ValueError(f"Invalid blinds: SB={self.small_blind}, BB={self.big_blind}")
+        if self.blind_schedule is not None:
+            for i, item in enumerate(self.blind_schedule):
+                sb, bb = item
+                if sb <= 0 or bb <= sb:
+                    raise ValueError(f"Invalid blind schedule entry at index {i}: SB={sb}, BB={bb}")
 
         # Resolve execution mode
         if self.execution_mode is None:
@@ -120,17 +131,37 @@ class TournamentConfig:
             + 0.30 * 0.50
         )
 
-    @classmethod
-    def official_120(cls) -> TournamentConfig:
-        """Official 120-player tournament configuration."""
-        return cls(field_size=120, execution_mode=ExecutionMode.OFFICIAL)
+    def get_blinds(self, round_no: int, stage: str = "preliminary") -> tuple[int, int]:
+        """Get (small_blind, big_blind) for a specific round or stage."""
+        if self.blind_schedule is not None and 1 <= round_no <= len(self.blind_schedule):
+            return self.blind_schedule[round_no - 1]
+        if not self.progressive_blinds:
+            return (self.small_blind, self.big_blind)
+
+        if stage == "semifinal" or round_no == 11:
+            return (int(self.small_blind * 1.5), int(self.big_blind * 1.5))
+        if stage == "final" or round_no == 12:
+            return (int(self.small_blind * 2.0), int(self.big_blind * 2.0))
+
+        # Preliminary progression across rounds
+        if round_no <= 3:
+            return (self.small_blind, self.big_blind)
+        elif round_no <= 7:
+            return (int(self.small_blind * 1.5), int(self.big_blind * 1.5))
+        else:
+            return (int(self.small_blind * 2.0), int(self.big_blind * 2.0))
 
     @classmethod
-    def fast_36(cls, mode: ExecutionMode = ExecutionMode.DEV) -> TournamentConfig:
+    def official_120(cls, progressive_blinds: bool = False, blind_schedule: list[tuple[int, int]] | None = None) -> TournamentConfig:
+        """Official 120-player tournament configuration."""
+        return cls(field_size=120, execution_mode=ExecutionMode.OFFICIAL, progressive_blinds=progressive_blinds, blind_schedule=blind_schedule)
+
+    @classmethod
+    def fast_36(cls, mode: ExecutionMode = ExecutionMode.DEV, progressive_blinds: bool = False, blind_schedule: list[tuple[int, int]] | None = None) -> TournamentConfig:
         """Fast 36-player research profile (same structure, scaled down field). Allowed only in DEV/TEST."""
         if mode == ExecutionMode.OFFICIAL:
             raise ValueError("fast_36 cannot be used in OFFICIAL execution mode.")
-        return cls(field_size=36, execution_mode=mode)
+        return cls(field_size=36, execution_mode=mode, progressive_blinds=progressive_blinds, blind_schedule=blind_schedule)
 
     @classmethod
     def smoke_24(cls, mode: ExecutionMode = ExecutionMode.TEST) -> TournamentConfig:
@@ -165,12 +196,16 @@ class TournamentConfig:
             "final_qualifiers": "final_qualifiers",
             "final_hands": "final_hands",
             "execution_mode": "execution_mode",
+            "progressive_blinds": "progressive_blinds",
+            "blind_schedule": "blind_schedule",
         }
         kwargs: dict[str, Any] = {}
         for k, v in data.items():
             if k in mapping:
                 if mapping[k] == "execution_mode" and v is not None:
                     kwargs["execution_mode"] = ExecutionMode(v)
+                elif mapping[k] == "blind_schedule" and v is not None:
+                    kwargs["blind_schedule"] = [tuple(x) for x in v]
                 else:
                     kwargs[mapping[k]] = v
         return cls(**kwargs)

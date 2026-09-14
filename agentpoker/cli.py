@@ -99,6 +99,7 @@ def main():
     s.add_argument('--agents',type=int,default=default_field,help=f'参赛人数（默认 {default_field}，官方正赛规模）')
     s.add_argument('--runs',type=int,default=10,help='模拟场数（默认 10）')
     s.add_argument('--seed',type=int,default=7,help='随机种子，同种子结果可复现')
+    s.add_argument('--progressive-blinds', dest='progressive_blinds', action='store_true', default=False, help='启用锦标赛盲注随轮次递增机制')
     t=sub.add_parser('train',help='进化训练：逐代演化策略参数，产出冠军模型')
     t.add_argument('--track',choices=['universal','targeted'],default=None,help='训练轨：universal=通用原型池（泛化好）；targeted=真实画像特训（贴合当前赛场）。不指定时：有 --profiles 走 targeted，否则 universal')
     t.add_argument('--generations',type=int,default=10,help='训练代数。每代耗时取决于 --runs 和 --agents')
@@ -106,6 +107,7 @@ def main():
     t.add_argument('--runs',type=int,default=30,help='每个候选评估的锦标赛场数。建议正式训练用 >=120')
     t.add_argument('--final-race',type=int,default=200,help='最终在留出集上验证冠军的场数，决定最后报告的 fitness 有多可信')
     t.add_argument('--agents',type=int,default=default_field,help=f'每场锦标赛参赛人数，对齐真实赛场规模（默认 {default_field}）')
+    t.add_argument('--progressive-blinds', dest='progressive_blinds', action='store_true', default=False, help='启用锦标赛盲注随轮次递增机制（预赛100/200->150/300->200/400）')
     t.add_argument('--equity-samples',type=int,default=0,help='胜率蒙特卡洛采样数：0=用离线标定表查表（快，训练推荐）；>0=实时精确采样（更准但慢很多）')
     t.add_argument('--workers',type=int,default=0,help='并发进程数，0=自动（最多 8 核）')
     t.add_argument('--profiles',default=None,help='对手画像文件路径。targeted 轨默认 models/opponent_profiles.json')
@@ -123,6 +125,7 @@ def main():
     t.add_argument('--shadow-clones',type=int,default=2,help='2.5 自博弈模式下同桌常驻的影子克隆体数量（默认 2）')
     e=sub.add_parser('evaluate',help='离线评估：让指定模型跟真实画像打 N 场锦标赛，看泛化表现（不上真实赛场）')
     e.add_argument('--strategy',default='models/champion.json',help='要评估的模型文件路径')
+    e.add_argument('--progressive-blinds', dest='progressive_blinds', action='store_true', default=False, help='启用锦标赛盲注随轮次递增机制')
     e.add_argument('--runs',type=int,default=500,help='评估场数。场数越多置信区间越窄，500 场时标准误约 ±0.016')
     e.add_argument('--agents',type=int,default=default_field,help=f'对手池人数，建议对齐真实赛场规模（默认 {default_field}）')
     e.add_argument('--equity-samples',type=int,default=0,help='胜率采样数：0=查表（快）；>0=实时精确采样（准但慢）')
@@ -179,8 +182,14 @@ def main():
         for i in range(args.agents):
             base=ARCHETYPES[names[i%len(names)]]
             agents.append(SimAgent(f'agent_{i+1:03d}',StrategyAgent(base,seed=args.seed+i,name=f'agent_{i+1:03d}')))
+        tc = None
+        if getattr(args, 'progressive_blinds', False):
+            if args.agents == 120:
+                tc = TournamentConfig.official_120(progressive_blinds=True)
+            elif args.agents % 6 == 0 and args.agents >= 12:
+                tc = TournamentConfig(field_size=args.agents, progressive_blinds=True)
         for run in range(args.runs):
-            sim=LeagueSimulator(agents,seed=args.seed+run*10007); r=sim.run_event(); print(f'run={run+1} top12={[x.agent_id for x in r["qualified"][:12]]} champion={r["final"][0].agent_id if r["final"] else None}')
+            sim=LeagueSimulator(agents,seed=args.seed+run*10007, config=tc); r=sim.run_event(); print(f'run={run+1} top12={[x.agent_id for x in r["qualified"][:12]]} champion={r["final"][0].agent_id if r["final"] else None}')
     elif args.cmd=='train':
         if args.track is not None:
             track = args.track
@@ -212,11 +221,19 @@ def main():
                 print(f"[Train] 原型博弈模式 (无真实画像挂载)")
             print(f"[Train] 候选模型保存: {save_path} | 归档: {archive_dir}")
 
+        tc = None
+        if getattr(args, 'progressive_blinds', False):
+            if args.agents == 120:
+                tc = TournamentConfig.official_120(progressive_blinds=True)
+            elif args.agents % 6 == 0 and args.agents >= 12:
+                tc = TournamentConfig(field_size=args.agents, progressive_blinds=True)
+
         trainer = StrategyTrainer(
             seed=7, pool_size=args.agents, equity_samples=args.equity_samples, workers=args.workers,
             profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands,
             profile_share=args.profile_share, profile_top=args.profile_top,
-            self_play=args.self_play, shadow_clones=args.shadow_clones
+            self_play=args.self_play, shadow_clones=args.shadow_clones,
+            tournament_config=tc,
         )
         if profiles_src:
             n_prof = trainer.n_profiles_loaded
@@ -230,7 +247,13 @@ def main():
         print(f"       python -m agentpoker.cli battle --models models/champion.json {save_path} --certify --candidate {save_path} --promote")
     elif args.cmd=='evaluate':
         pth=StrategyAgent.load(args.strategy).params
-        r=ArenaEvaluator(pool_size=args.agents,equity_samples=args.equity_samples,profiles=args.profiles,workers=args.workers).evaluate(pth,runs=args.runs,seed_offset=9911,verbose=True)
+        tc = None
+        if getattr(args, 'progressive_blinds', False):
+            if args.agents == 120:
+                tc = TournamentConfig.official_120(progressive_blinds=True)
+            elif args.agents % 6 == 0 and args.agents >= 12:
+                tc = TournamentConfig(field_size=args.agents, progressive_blinds=True)
+        r=ArenaEvaluator(pool_size=args.agents,equity_samples=args.equity_samples,profiles=args.profiles,workers=args.workers,tournament_config=tc).evaluate(pth,runs=args.runs,seed_offset=9911,verbose=True)
         print(json.dumps(r,ensure_ascii=False,indent=2))
     elif args.cmd=='discover': print(AgentPokerClient(Config()).discover())
     elif args.cmd=='connect': run_connect(base_url=args.app)
@@ -367,7 +390,7 @@ def main():
 
         if getattr(args, 'certify', False):
             from .battle import certify_champion, print_certification_card, promote_champion
-            cert_res = certify_champion(report, candidate_cid=getattr(args, 'candidate', None))
+            cert_res = certify_champion(report, candidate_cid=getattr(args, 'candidate', None), official=(args.agents == 120))
             print_certification_card(cert_res)
             if getattr(args, 'promote', False):
                 if cert_res.certified:

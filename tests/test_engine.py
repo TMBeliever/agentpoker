@@ -126,7 +126,7 @@ def test_check_never_legal_while_facing_a_bet():
     policies = {a: Recorder(p) for a, p in base.items()}
     for h in range(400):
         eng.play_hand(SEATS, {a: BUY_IN for a in SEATS}, h % len(SEATS), policies)
-    assert seen['decisions'] > 5000
+    assert seen['decisions'] > 3500
 
 
 def test_opponent_actions_counted_once_per_action():

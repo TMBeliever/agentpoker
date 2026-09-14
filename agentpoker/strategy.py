@@ -312,7 +312,14 @@ class StrategyAgent:
         dealer = obs.get("dealer_seat")
         seat = obs.get("position")
         if dealer is not None and seat is not None:
-            offset = (int(seat) - int(dealer)) % n
+            seat_indices = [p.get("seatIndex") for p in players if isinstance(p, dict) and p.get("seatIndex") is not None]
+            if len(seat_indices) == len(players) and int(dealer) in seat_indices and int(seat) in seat_indices:
+                sorted_seats = sorted(seat_indices)
+                d_idx = sorted_seats.index(int(dealer))
+                cw_order = sorted_seats[d_idx:] + sorted_seats[:d_idx]
+                offset = cw_order.index(int(seat))
+            else:
+                offset = (int(seat) - int(dealer)) % n
             if offset == 0:  # Button
                 return "btn", 1.35, True
             elif offset == 1:  # Small Blind
@@ -335,15 +342,19 @@ class StrategyAgent:
         board = [parse_card(c) for c in obs["board"]]
         ctx = obs.get("context") or {}
         self._observe_opponents(obs)
-
-        active_opp = max(1, len([p for p in obs["players"] if not p.get("folded") and not p.get("allIn")]) - 1)
+        hero_id = obs.get("agentId")
+        opponents = [p for p in obs.get("players", []) if hero_id is None or p.get("agentId") != hero_id]
+        if not opponents and obs.get("players"):
+            opponents = obs["players"][1:]
+        contesting_opp = max(1, len([p for p in opponents if not p.get("folded")]))
+        active_opp = len([p for p in opponents if not p.get("folded") and not p.get("allIn")])
         pressure = self._tournament_pressure(ctx)
         villain = self._active_villain_profile(obs)
 
         if not board:
             return self._preflop(legal, hero, obs, pressure, villain)
 
-        equity = self._equity(hero, board, active_opp)
+        equity = self._equity(hero, board, contesting_opp)
         pot = float(obs.get("pot", 0) or 0)
         bb_size = float(obs.get("big_blind", 200) or 200)
         call = float(legal.get("call", 0) or 0)
@@ -397,7 +408,7 @@ class StrategyAgent:
                 fold_edge -= 0.05
 
         # Fold if facing bet and clearly behind pot odds
-        if facing_bet and strength < max(0.16, fold_edge) and self._noise(0.025):
+        if facing_bet and strength < max(0.16, fold_edge):
             if "fold" in legal:
                 return {"type": "fold"}
 
@@ -415,8 +426,8 @@ class StrategyAgent:
         if self.params.value_threshold != 0.68:
             value_cut += (self.params.value_threshold - 0.68) * 0.4
         # Multiway winning hand requirement shifts up: two pair/sets needed when 3+ players contest
-        if active_opp > 1:
-            value_cut += 0.04 * (active_opp - 1)
+        if contesting_opp > 1:
+            value_cut += 0.04 * (contesting_opp - 1)
         if villain.get("is_station"):
             # Stations call down with weaker holdings: widen value betting range
             value_cut -= 0.05
@@ -444,19 +455,17 @@ class StrategyAgent:
             if "check" in legal:
                 return {"type": "check"}
 
-        # Semi-bluffs / draws
-        draw_bias = texture["draws"]
-        semi_threshold = max(0.29, pot_odds * 0.80)
+        # Semi-bluffs / draws (restricted to Flop and Turn; requires hero to actually hold a draw or thin value)
+        hero_has_draw = bool(eval_meta.get("is_draw", False)) or float(eval_meta.get("draw_equity", 0.0) or 0.0) >= 0.05
+        semi_threshold = max(0.30, pot_odds * 0.85)
         thin_cut = max(self.params.thin_value_threshold, value_cut - 0.08)
-        if strength >= semi_threshold and (draw_bias > 0 or strength > thin_cut):
+        if street < 5 and strength >= semi_threshold and (hero_has_draw or strength > thin_cut):
             semi_cbet = aggression_freq * (0.65 + 0.5 * pressure)
             if active_opp > 1:
                 semi_cbet *= (self.params.multiway_decay ** (active_opp - 1))
             if villain.get("fold", 0.52) > 0.58 and active_opp == 1:
                 semi_cbet *= 1.25
-            if ("raise" in legal or "bet" in legal) and self._noise(semi_cbet):
-                # _sized_raise picks the right action type for the spot (bet when first
-                # to act, raise when facing one).
+            if active_opp >= 1 and ("raise" in legal or "bet" in legal) and self._noise(semi_cbet):
                 return self._sized_raise(legal, strength=strength, value=False, pressure=pressure, pot=pot, bb_size=bb_size, wetness=texture["wetness"])
             if "call" in legal and strength >= pot_odds * 0.88:
                 return {"type": "call"}
@@ -499,6 +508,8 @@ class StrategyAgent:
             bluff_rate *= (0.35 ** (active_opp - 1))
         if active_opp >= 3 and not has_nut_flush_blocker:
             bluff_rate = 0.0  # Zero out air bluffs into 3+ opponents!
+        if active_opp == 0:
+            bluff_rate = 0.0  # Zero out bluffs when all opponents are all-in (zero fold equity)
 
         if bluff_rate > 0.0:
             if "raise" in legal and self._noise(bluff_rate):
@@ -686,7 +697,7 @@ class StrategyAgent:
             if pos_tag in {"utg", "mp", "hj", "co", "btn", "early", "late"}:
                 if in_open_range and ("raise" in legal or "bet" in legal or "allIn" in legal):
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult)
+                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult, call=call, hero_stack=hero_stack)
                 if "fold" in legal:
                     return {"type": "fold"}
                 if call == 0 and "check" in legal:
@@ -697,7 +708,7 @@ class StrategyAgent:
             if pos_tag == "sb":
                 if in_open_range and ("raise" in legal or "bet" in legal or "allIn" in legal):
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult)
+                    return self._preflop_raise(legal, premium=premium, bb_size=bb_size, size_mult=preflop_size_mult, call=call, hero_stack=hero_stack)
                 if in_range and "call" in legal and self.params.open_frequency <= 0.25 and self._noise(0.10):
                     return {"type": "call"}
                 if "fold" in legal:
@@ -719,6 +730,9 @@ class StrategyAgent:
             else:
                 in_defend = in_range
 
+            facing_heavy_raise = call >= bb_size * 4.5
+            facing_massive_raise = call >= bb_size * 10.0 or (hero_stack > 0 and call >= hero_stack * 0.35)
+
             if "raise" in legal or "bet" in legal:
                 freq = self.params.squeeze_frequency if is_squeeze else self.params.threebet_frequency
                 freq *= pos_mult
@@ -729,14 +743,30 @@ class StrategyAgent:
                 if stage == "final" and rank >= 2 and (stage_progress > 0.3 or rem_val <= 15):
                     freq *= 1.35  # Winner-take-all trailing 3-bet aggression
 
+                if facing_massive_raise:
+                    # Facing massive 4-bet/5-bet: only absolute top premiums (AA, KK, QQ, AKs) contest with All-In
+                    is_top_tier = (pair and a >= 12) or (a == 14 and b == 13 and hero[0].suit == hero[1].suit)
+                    if is_top_tier:
+                        self._hero_is_aggressor = True
+                        if "allIn" in legal:
+                            return {"type": "allIn"}
+                        return self._preflop_raise(legal, premium=True, bb_size=bb_size, size_mult=preflop_size_mult, call=call, hero_stack=hero_stack)
+                    elif "call" in legal and (pair and a >= 11):
+                        return {"type": "call"}
+                    return {"type": "fold"} if "fold" in legal else self._safe_action(legal)
+
                 if premium:
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=True, bb_size=bb_size, size_mult=preflop_size_mult)
-                if in_defend and self._noise(freq * (1.0 + 0.35 * max(0.0, pressure))):
+                    return self._preflop_raise(legal, premium=True, bb_size=bb_size, size_mult=preflop_size_mult, call=call, hero_stack=hero_stack)
+                if in_defend and not facing_heavy_raise and self._noise(freq * (1.0 + 0.35 * max(0.0, pressure))):
                     self._hero_is_aggressor = True
-                    return self._preflop_raise(legal, premium=False, bb_size=bb_size, size_mult=preflop_size_mult)
+                    return self._preflop_raise(legal, premium=False, bb_size=bb_size, size_mult=preflop_size_mult, call=call, hero_stack=hero_stack)
 
             if "call" in legal:
+                if facing_massive_raise:
+                    if pair and a >= 11 or (a == 14 and b >= 12):
+                        return {"type": "call"}
+                    return {"type": "fold"} if "fold" in legal else self._safe_action(legal)
                 if in_defend and (self._noise(0.90) or premium):
                     return {"type": "call"}
 
@@ -767,7 +797,7 @@ class StrategyAgent:
             return self._sized_bet(legal, pot=pot, bb_size=bb_size, value=premium, pressure=pressure)
         return self._safe_action(legal)
 
-    def _preflop_raise(self, legal: dict[str, Any], premium: bool, bb_size: float = 200.0, size_mult: float = 1.0) -> dict[str, Any]:
+    def _preflop_raise(self, legal: dict[str, Any], premium: bool, bb_size: float = 200.0, size_mult: float = 1.0, call: float = 0.0, hero_stack: float = 0.0) -> dict[str, Any]:
         spec = legal.get("raise", legal.get("bet"))
         if not spec:
             if "allIn" in legal:
@@ -781,7 +811,20 @@ class StrategyAgent:
             if "allIn" in legal:
                 return {"type": "allIn"}
             return {"type": action_type, "amount": hi}
-        target = int((self.params.open_size * size_mult + (0.6 if premium else 0.0)) * bb_size)
+
+        if call > bb_size * 1.05:
+            # Re-raising (3-bet or 4-bet)
+            if (hero_stack > 0 and lo >= hero_stack * 0.38) or call >= bb_size * 6.0:
+                # Heavy commitment: push All-In rather than clicking back min-raise
+                if "allIn" in legal:
+                    return {"type": "allIn"}
+                return {"type": action_type, "amount": hi}
+            # Calibrated 3-bet sizing: ~3.0x - 3.5x opponent's raise
+            target = int(max(lo, call * (3.0 * size_mult + (0.4 if premium else 0.0))))
+        else:
+            # Unopened open raise
+            target = int((self.params.open_size * size_mult + (0.6 if premium else 0.0)) * bb_size)
+
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _equity(self, hero: list[Any], board: list[Any], opponents: int) -> float:
@@ -925,9 +968,12 @@ class StrategyAgent:
             base = max(0.25, base + texture_raise_bias)
         frac = (base + 0.10 * max(0.0, pressure) + 0.12 * max(0.0, strength - 0.75)) * size_mult
         if pot > 0:
-            target = int(lo + pot * frac * 0.5)
+            target = int(max(lo, lo + pot * frac * 0.25))
         else:
             target = int(lo + (hi - lo) * max(0.05, min(0.90, frac)))
+        # Bluff protection: never commit more than 35% of stack on an unmade hand bluff
+        if not value and hi > 0 and target > hi * 0.35:
+            target = lo
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _sized_bet(self, legal: dict[str, Any], value: bool = True, pressure: float = 0.0, size_mult: float = 1.0, pot: float = 0.0, bb_size: float = 200.0, street: int | None = None, is_cbet: bool = False, wetness: float | None = None) -> dict[str, Any]:
@@ -957,6 +1003,9 @@ class StrategyAgent:
             target = int(max(pot * frac, bb_size))
         else:
             target = int(lo + (hi - lo) * max(0.05, min(0.88, frac)))
+        # Bluff protection: never commit more than 35% of stack on an unmade hand bluff
+        if not value and hi > 0 and target > hi * 0.35:
+            target = lo
         return {"type": action_type, "amount": max(lo, min(hi, target))}
 
     def _noise(self, probability: float) -> bool:
@@ -1073,11 +1122,24 @@ class StrategyAgent:
             players.append({
                 "agentId": p.get("agentId"),
                 "stack": p.get("stack", 0),
+                "seatIndex": p.get("seatIndex"),
                 "folded": bool(hs and hs.get("status") == "folded"),
                 "allIn": bool(hs and hs.get("status") == "allIn"),
                 "currentBet": hs.get("currentBet", 0) if hs else 0,
             })
-        dealer_seat = table.get("dealerSeat") or table.get("buttonSeat") or hand.get("buttonSeat")
+        dealer_seat = (
+            table.get("dealerSeatIndex")
+            or table.get("dealerSeat")
+            or table.get("buttonSeat")
+            or hand.get("dealerSeatIndex")
+            or hand.get("buttonSeat")
+        )
+        big_blind = (
+            (table.get("blinds") or {}).get("big")
+            or table.get("bigBlind")
+            or (hand.get("blinds") or {}).get("big")
+            or 1000
+        )
         local = {
             "hero": me["handState"]["holeCards"],
             "board": hand.get("communityCards") or [],
@@ -1091,8 +1153,8 @@ class StrategyAgent:
             "hand_id": hand.get("id"),
             "agentId": obs.get("agentId"),
             "dealer_seat": dealer_seat,
-            "position": me.get("seat"),
-            "big_blind": table.get("bigBlind") or 200,
+            "position": me.get("seat") if me.get("seat") is not None else me.get("seatIndex"),
+            "big_blind": big_blind,
         }
         return self.choose_local(local)
 
@@ -1100,9 +1162,15 @@ class StrategyAgent:
     def _legal_map(amap: dict[str, Any]) -> dict[str, Any]:
         out = {}
         for k, v in amap.items():
-            if k in ("fold", "check"): out[k] = None
-            elif k in ("call", "allIn"): out[k] = int(v.get("amount", 0))
-            elif k in ("raise", "bet"): out[k] = (int(v.get("minAmount", 0)), int(v.get("maxAmount", 0)))
+            if k in ("fold", "check"):
+                out[k] = None
+            elif k in ("call", "allIn"):
+                out[k] = int(v.get("amount", v.get("min", 0)))
+            elif k in ("raise", "bet"):
+                out[k] = (
+                    int(v.get("minAmount", v.get("min", 0))),
+                    int(v.get("maxAmount", v.get("max", 0))),
+                )
         return out
 
     @staticmethod

@@ -47,9 +47,15 @@ class AgentPokerClient:
         return h
     def _request(self,method,path,body=None,auth=False,accept=None):
         headers=self._headers() if auth else {'Accept': accept or 'application/json','Content-Type':'application/json'}
-        if accept: headers['Accept']=accept
-        try:r=self.s.request(method,self.cfg.base_url+path,json=body,headers=headers,timeout=self.cfg.timeout)
-        except requests.RequestException as e: raise
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                r=self.s.request(method,self.cfg.base_url+path,json=body,headers=headers,timeout=self.cfg.timeout)
+                break
+            except requests.RequestException:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(0.5 * (2 ** attempt))
         if r.status_code>=400:
             try:data=r.json(); err=data.get('error',{})
             except Exception:data={}; err={}

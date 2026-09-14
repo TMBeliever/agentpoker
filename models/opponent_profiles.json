@@ -144,36 +144,36 @@
     "allins_count": 61,
     "street_actions": {
       "preflop": {
-        "bets": 505,
-        "raises": 505,
-        "calls": 163,
-        "folds": 1343,
-        "checks": 27,
-        "allins": 44
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 102,
-        "raises": 102,
-        "calls": 118,
-        "folds": 79,
-        "checks": 211,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 75,
-        "raises": 75,
-        "calls": 58,
-        "folds": 56,
-        "checks": 115,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 50,
-        "raises": 50,
-        "calls": 26,
-        "folds": 34,
-        "checks": 67,
-        "allins": 12
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -820246,
@@ -356,36 +356,36 @@
     "allins_count": 54,
     "street_actions": {
       "preflop": {
-        "bets": 1615,
-        "raises": 1615,
-        "calls": 729,
-        "folds": 7516,
-        "checks": 85,
-        "allins": 36
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 824,
-        "raises": 824,
-        "calls": 467,
-        "folds": 143,
-        "checks": 332,
-        "allins": 6
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 520,
-        "raises": 520,
-        "calls": 166,
-        "folds": 131,
-        "checks": 200,
-        "allins": 11
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 196,
-        "raises": 196,
-        "calls": 35,
-        "folds": 85,
-        "checks": 172,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 3472346,
@@ -568,35 +568,35 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 11,
-        "raises": 11,
-        "calls": 10,
-        "folds": 229,
-        "checks": 3,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 2,
-        "folds": 1,
-        "checks": 7,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 8,
-        "raises": 8,
-        "calls": 5,
-        "folds": 1,
-        "checks": 5,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 4,
-        "folds": 1,
-        "checks": 3,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -636,17 +636,17 @@
     "exploit_advice": "后位无脑偷盲捡底池；对其实施高频C-Bet；一旦其在转牌/河牌反常下注或加注，坚决盖掉中强牌。"
   },
   "agent_81d7b64ec471f92d": {
-    "name": "从零开始打德州",
-    "hands": 3339,
+    "name": "德扑怎么玩",
+    "hands": 3341,
     "metrics": {
       "vpip": {
         "count": 754,
-        "opportunities": 3339,
+        "opportunities": 3341,
         "has_sample": true,
-        "rate": 0.2258,
+        "rate": 0.2257,
         "confidence": 0.9976,
         "population_prior": 0.25,
-        "smoothed_rate": 0.2259
+        "smoothed_rate": 0.2257
       },
       "pfr": {
         "count": 519,
@@ -748,7 +748,7 @@
         "smoothed_rate": 0.504
       }
     },
-    "vpip_opps": 3339,
+    "vpip_opps": 3341,
     "vpip_count": 754,
     "pfr_opps": 1851,
     "pfr_count": 519,
@@ -780,41 +780,41 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 618,
-        "raises": 618,
-        "calls": 213,
-        "folds": 2636,
-        "checks": 14,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 167,
-        "raises": 167,
-        "calls": 129,
-        "folds": 70,
-        "checks": 145,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 111,
-        "raises": 111,
-        "calls": 80,
-        "folds": 33,
-        "checks": 76,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 54,
-        "raises": 54,
-        "calls": 34,
-        "folds": 22,
-        "checks": 63,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -195220,
     "bb_100": -5.8,
-    "bb_sum": 3337750.0,
+    "bb_sum": 3339750.0,
     "open_size_n": 519,
     "cbet_n": 68,
     "bet_n": 177,
@@ -992,36 +992,36 @@
     "allins_count": 19,
     "street_actions": {
       "preflop": {
-        "bets": 199,
-        "raises": 199,
-        "calls": 28,
-        "folds": 503,
-        "checks": 2,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 52,
-        "raises": 52,
-        "calls": 14,
-        "folds": 29,
-        "checks": 41,
-        "allins": 8
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 19,
-        "raises": 19,
-        "calls": 3,
-        "folds": 16,
-        "checks": 31,
-        "allins": 6
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 3,
-        "folds": 7,
-        "checks": 17,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -252983,
@@ -1204,36 +1204,36 @@
     "allins_count": 12,
     "street_actions": {
       "preflop": {
-        "bets": 226,
-        "raises": 226,
-        "calls": 278,
-        "folds": 728,
-        "checks": 52,
-        "allins": 8
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 118,
-        "raises": 118,
-        "calls": 40,
-        "folds": 96,
-        "checks": 186,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 75,
-        "raises": 75,
-        "calls": 17,
-        "folds": 31,
-        "checks": 108,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 28,
-        "raises": 28,
-        "calls": 8,
-        "folds": 28,
-        "checks": 81,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 295959,
@@ -1416,36 +1416,36 @@
     "allins_count": 30,
     "street_actions": {
       "preflop": {
-        "bets": 371,
-        "raises": 371,
-        "calls": 424,
-        "folds": 2368,
-        "checks": 25,
-        "allins": 9
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 278,
-        "raises": 278,
-        "calls": 155,
-        "folds": 62,
-        "checks": 179,
-        "allins": 9
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 148,
-        "raises": 148,
-        "calls": 67,
-        "folds": 20,
-        "checks": 105,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 74,
-        "raises": 74,
-        "calls": 34,
-        "folds": 7,
-        "checks": 74,
-        "allins": 8
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 377363,
@@ -1628,36 +1628,36 @@
     "allins_count": 98,
     "street_actions": {
       "preflop": {
-        "bets": 4755,
-        "raises": 4755,
-        "calls": 1192,
-        "folds": 1609,
-        "checks": 59,
-        "allins": 42
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 1579,
-        "raises": 1579,
-        "calls": 335,
-        "folds": 716,
-        "checks": 496,
-        "allins": 26
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 659,
-        "raises": 659,
-        "calls": 166,
-        "folds": 411,
-        "checks": 426,
-        "allins": 18
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 269,
-        "raises": 269,
-        "calls": 58,
-        "folds": 176,
-        "checks": 352,
-        "allins": 12
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -672795,
@@ -1696,26 +1696,26 @@
     "exploit_advice": "绝不河牌纯诈唬；顶对/中对放宽抓诈(Bluff-catch)；手握强牌翻前翻后多做Check-raise引诱其推注。"
   },
   "agent_a0820c4334779ae3": {
-    "name": "啦啦啦",
-    "hands": 1038,
+    "name": "隔壁老王",
+    "hands": 1079,
     "metrics": {
       "vpip": {
-        "count": 513,
-        "opportunities": 1038,
+        "count": 514,
+        "opportunities": 1079,
         "has_sample": true,
-        "rate": 0.4942,
-        "confidence": 0.9924,
+        "rate": 0.4764,
+        "confidence": 0.9926,
         "population_prior": 0.25,
-        "smoothed_rate": 0.4924
+        "smoothed_rate": 0.4747
       },
       "pfr": {
-        "count": 199,
-        "opportunities": 609,
+        "count": 200,
+        "opportunities": 611,
         "has_sample": true,
-        "rate": 0.3268,
-        "confidence": 0.987,
+        "rate": 0.3273,
+        "confidence": 0.9871,
         "population_prior": 0.18,
-        "smoothed_rate": 0.3249
+        "smoothed_rate": 0.3254
       },
       "threebet": {
         "count": 54,
@@ -1808,10 +1808,10 @@
         "smoothed_rate": 0.438
       }
     },
-    "vpip_opps": 1038,
-    "vpip_count": 513,
-    "pfr_opps": 609,
-    "pfr_count": 199,
+    "vpip_opps": 1079,
+    "vpip_count": 514,
+    "pfr_opps": 611,
+    "pfr_count": 200,
     "threebet_opps": 414,
     "threebet_count": 54,
     "fold_to_threebet_opps": 75,
@@ -1832,54 +1832,54 @@
     "wtsd_count": 129,
     "wsd_opps": 129,
     "wsd_count": 56,
-    "raises_count": 1000,
+    "raises_count": 1001,
     "calls_count": 446,
-    "folds_count": 658,
-    "bets_count": 1000,
+    "folds_count": 659,
+    "bets_count": 1001,
     "checks_count": 65,
     "allins_count": 103,
     "street_actions": {
       "preflop": {
-        "bets": 266,
-        "raises": 266,
-        "calls": 393,
-        "folds": 540,
-        "checks": 2,
-        "allins": 17
+        "bets": 1,
+        "raises": 1,
+        "calls": 0,
+        "folds": 1,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 450,
-        "raises": 450,
-        "calls": 34,
-        "folds": 77,
-        "checks": 26,
-        "allins": 66
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 177,
-        "raises": 177,
-        "calls": 12,
-        "folds": 32,
-        "checks": 18,
-        "allins": 12
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 107,
-        "raises": 107,
-        "calls": 7,
-        "folds": 9,
-        "checks": 19,
-        "allins": 8
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -658950,
-    "bb_100": -63.5,
-    "bb_sum": 1038000.0,
-    "open_size_n": 199,
+    "bb_100": -61.1,
+    "bb_sum": 1079000.0,
+    "open_size_n": 200,
     "cbet_n": 57,
     "bet_n": 413,
     "raise_n": 264,
-    "vpip": 0.492,
+    "vpip": 0.475,
     "pfr": 0.325,
     "threebet": 0.129,
     "cbet_flop": 0.899,
@@ -1890,15 +1890,15 @@
     "fold_to_river": 0.327,
     "wtsd": 0.312,
     "wsd": 0.438,
-    "raise": 0.957,
-    "fold": 0.633,
-    "call": 0.429,
-    "af": 4.48,
-    "open_size_bb": 6.0,
+    "raise": 0.922,
+    "fold": 0.61,
+    "call": 0.413,
+    "af": 4.49,
+    "open_size_bb": 5.98,
     "cbet_size": 0.193,
     "value_bet_size": 0.15,
     "raise_size": 1.5,
-    "sizing_samples": 933,
+    "sizing_samples": 934,
     "archetype": "Maniac (狂徒/高频乱搞)",
     "is_station": false,
     "is_nit": false,
@@ -2052,36 +2052,36 @@
     "allins_count": 7,
     "street_actions": {
       "preflop": {
-        "bets": 348,
-        "raises": 348,
-        "calls": 235,
-        "folds": 1763,
-        "checks": 18,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 145,
-        "raises": 145,
-        "calls": 122,
-        "folds": 51,
-        "checks": 121,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 51,
-        "raises": 51,
-        "calls": 79,
-        "folds": 24,
-        "checks": 96,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 37,
-        "folds": 30,
-        "checks": 78,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 636613,
@@ -2121,25 +2121,25 @@
   },
   "agent_f822c82b3cd298e8": {
     "name": "Neymar",
-    "hands": 2075,
+    "hands": 2155,
     "metrics": {
       "vpip": {
-        "count": 491,
-        "opportunities": 2075,
+        "count": 492,
+        "opportunities": 2155,
         "has_sample": true,
-        "rate": 0.2366,
-        "confidence": 0.9962,
+        "rate": 0.2283,
+        "confidence": 0.9963,
         "population_prior": 0.25,
-        "smoothed_rate": 0.2367
+        "smoothed_rate": 0.2284
       },
       "pfr": {
         "count": 254,
-        "opportunities": 1208,
+        "opportunities": 1213,
         "has_sample": true,
-        "rate": 0.2103,
+        "rate": 0.2094,
         "confidence": 0.9934,
         "population_prior": 0.18,
-        "smoothed_rate": 0.2101
+        "smoothed_rate": 0.2092
       },
       "threebet": {
         "count": 28,
@@ -2232,9 +2232,9 @@
         "smoothed_rate": 0.4227
       }
     },
-    "vpip_opps": 2075,
-    "vpip_count": 491,
-    "pfr_opps": 1208,
+    "vpip_opps": 2155,
+    "vpip_count": 492,
+    "pfr_opps": 1213,
     "pfr_count": 254,
     "threebet_opps": 833,
     "threebet_count": 28,
@@ -2257,54 +2257,54 @@
     "wsd_opps": 89,
     "wsd_count": 37,
     "raises_count": 633,
-    "calls_count": 435,
-    "folds_count": 1693,
+    "calls_count": 436,
+    "folds_count": 1697,
     "bets_count": 633,
     "checks_count": 213,
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 310,
-        "raises": 310,
-        "calls": 298,
-        "folds": 1658,
-        "checks": 6,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 191,
-        "raises": 191,
-        "calls": 77,
-        "folds": 12,
-        "checks": 92,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 94,
-        "raises": 94,
-        "calls": 41,
-        "folds": 12,
-        "checks": 69,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 38,
-        "raises": 38,
-        "calls": 19,
-        "folds": 11,
-        "checks": 46,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -25207,
     "bb_100": -1.2,
-    "bb_sum": 2073016.0,
+    "bb_sum": 2153016.0,
     "open_size_n": 254,
     "cbet_n": 58,
     "bet_n": 200,
     "raise_n": 65,
-    "vpip": 0.237,
-    "pfr": 0.21,
+    "vpip": 0.228,
+    "pfr": 0.209,
     "threebet": 0.034,
     "cbet_flop": 0.701,
     "fold_to_cbet": 0.121,
@@ -2314,10 +2314,10 @@
     "fold_to_river": 0.355,
     "wtsd": 0.296,
     "wsd": 0.423,
-    "raise": 0.305,
-    "fold": 0.815,
-    "call": 0.21,
-    "af": 2.91,
+    "raise": 0.293,
+    "fold": 0.786,
+    "call": 0.203,
+    "af": 2.9,
     "open_size_bb": 2.993,
     "cbet_size": 0.853,
     "value_bet_size": 0.87,
@@ -2333,16 +2333,16 @@
   },
   "agent_33a8335145892a9e": {
     "name": "牛",
-    "hands": 545,
+    "hands": 581,
     "metrics": {
       "vpip": {
         "count": 92,
-        "opportunities": 545,
+        "opportunities": 581,
         "has_sample": true,
-        "rate": 0.1688,
-        "confidence": 0.9855,
+        "rate": 0.1583,
+        "confidence": 0.9864,
         "population_prior": 0.25,
-        "smoothed_rate": 0.17
+        "smoothed_rate": 0.1596
       },
       "pfr": {
         "count": 59,
@@ -2444,7 +2444,7 @@
         "smoothed_rate": 0.4828
       }
     },
-    "vpip_opps": 545,
+    "vpip_opps": 581,
     "vpip_count": 92,
     "pfr_opps": 277,
     "pfr_count": 59,
@@ -2476,46 +2476,46 @@
     "allins_count": 3,
     "street_actions": {
       "preflop": {
-        "bets": 72,
-        "raises": 72,
-        "calls": 23,
-        "folds": 452,
-        "checks": 1,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 28,
-        "raises": 28,
-        "calls": 8,
-        "folds": 11,
-        "checks": 16,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 11,
-        "raises": 11,
-        "calls": 6,
-        "folds": 3,
-        "checks": 13,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 4,
-        "raises": 4,
-        "calls": 1,
-        "folds": 2,
-        "checks": 12,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -111805,
-    "bb_100": -20.5,
-    "bb_sum": 545000.0,
+    "bb_100": -19.2,
+    "bb_sum": 581000.0,
     "open_size_n": 59,
     "cbet_n": 18,
     "bet_n": 22,
     "raise_n": 3,
-    "vpip": 0.17,
+    "vpip": 0.16,
     "pfr": 0.212,
     "threebet": 0.053,
     "cbet_flop": 0.723,
@@ -2526,9 +2526,9 @@
     "fold_to_river": 0.473,
     "wtsd": 0.366,
     "wsd": 0.483,
-    "raise": 0.21,
-    "fold": 0.854,
-    "call": 0.073,
+    "raise": 0.197,
+    "fold": 0.802,
+    "call": 0.069,
     "af": 6.05,
     "open_size_bb": 2.517,
     "cbet_size": 0.433,
@@ -2688,35 +2688,35 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 51,
-        "raises": 51,
-        "calls": 81,
-        "folds": 188,
-        "checks": 2,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 9,
-        "raises": 9,
-        "calls": 29,
-        "folds": 26,
-        "checks": 39,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 6,
-        "raises": 6,
-        "calls": 9,
-        "folds": 13,
-        "checks": 20,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 2,
-        "raises": 2,
-        "calls": 6,
-        "folds": 4,
-        "checks": 15,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -2757,16 +2757,16 @@
   },
   "agent_d7326abeaf6f72fd": {
     "name": "重新做人",
-    "hands": 2138,
+    "hands": 2140,
     "metrics": {
       "vpip": {
         "count": 492,
-        "opportunities": 2138,
+        "opportunities": 2140,
         "has_sample": true,
-        "rate": 0.2301,
+        "rate": 0.2299,
         "confidence": 0.9963,
         "population_prior": 0.25,
-        "smoothed_rate": 0.2302
+        "smoothed_rate": 0.23
       },
       "pfr": {
         "count": 345,
@@ -2868,7 +2868,7 @@
         "smoothed_rate": 0.6716
       }
     },
-    "vpip_opps": 2138,
+    "vpip_opps": 2140,
     "vpip_count": 492,
     "pfr_opps": 1243,
     "pfr_count": 345,
@@ -2900,41 +2900,41 @@
     "allins_count": 39,
     "street_actions": {
       "preflop": {
-        "bets": 401,
-        "raises": 401,
-        "calls": 148,
-        "folds": 1708,
-        "checks": 21,
-        "allins": 34
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 38,
-        "raises": 38,
-        "calls": 114,
-        "folds": 82,
-        "checks": 174,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 21,
-        "raises": 21,
-        "calls": 30,
-        "folds": 67,
-        "checks": 113,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 15,
-        "raises": 15,
-        "calls": 8,
-        "folds": 30,
-        "checks": 57,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -573530,
-    "bb_100": -26.9,
-    "bb_sum": 2135750.0,
+    "bb_100": -26.8,
+    "bb_sum": 2137750.0,
     "open_size_n": 345,
     "cbet_n": 25,
     "bet_n": 37,
@@ -2951,7 +2951,7 @@
     "wtsd": 0.215,
     "wsd": 0.672,
     "raise": 0.222,
-    "fold": 0.881,
+    "fold": 0.88,
     "call": 0.141,
     "af": 3.17,
     "open_size_bb": 2.322,
@@ -3112,36 +3112,36 @@
     "allins_count": 14,
     "street_actions": {
       "preflop": {
-        "bets": 257,
-        "raises": 257,
-        "calls": 148,
-        "folds": 698,
-        "checks": 10,
-        "allins": 5
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 96,
-        "raises": 96,
-        "calls": 82,
-        "folds": 54,
-        "checks": 96,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 47,
-        "raises": 47,
-        "calls": 39,
-        "folds": 28,
-        "checks": 51,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 21,
-        "raises": 21,
-        "calls": 26,
-        "folds": 5,
-        "checks": 39,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 252727,
@@ -3181,25 +3181,25 @@
   },
   "agent_38f374f5d6354c4b": {
     "name": "弃牌的艺术",
-    "hands": 271,
+    "hands": 351,
     "metrics": {
       "vpip": {
-        "count": 208,
-        "opportunities": 271,
+        "count": 209,
+        "opportunities": 351,
         "has_sample": true,
-        "rate": 0.7675,
-        "confidence": 0.9713,
+        "rate": 0.5954,
+        "confidence": 0.9777,
         "population_prior": 0.25,
-        "smoothed_rate": 0.7527
+        "smoothed_rate": 0.5877
       },
       "pfr": {
-        "count": 110,
-        "opportunities": 160,
+        "count": 111,
+        "opportunities": 161,
         "has_sample": true,
-        "rate": 0.6875,
-        "confidence": 0.9524,
+        "rate": 0.6894,
+        "confidence": 0.9527,
         "population_prior": 0.18,
-        "smoothed_rate": 0.6633
+        "smoothed_rate": 0.6653
       },
       "threebet": {
         "count": 20,
@@ -3292,10 +3292,10 @@
         "smoothed_rate": 0.4375
       }
     },
-    "vpip_opps": 271,
-    "vpip_count": 208,
-    "pfr_opps": 160,
-    "pfr_count": 110,
+    "vpip_opps": 351,
+    "vpip_count": 209,
+    "pfr_opps": 161,
+    "pfr_count": 111,
     "threebet_opps": 96,
     "threebet_count": 20,
     "fold_to_threebet_opps": 22,
@@ -3316,55 +3316,55 @@
     "wtsd_count": 56,
     "wsd_opps": 56,
     "wsd_count": 24,
-    "raises_count": 233,
+    "raises_count": 234,
     "calls_count": 159,
     "folds_count": 117,
-    "bets_count": 233,
+    "bets_count": 234,
     "checks_count": 171,
     "allins_count": 12,
     "street_actions": {
       "preflop": {
-        "bets": 135,
-        "raises": 135,
-        "calls": 112,
-        "folds": 44,
-        "checks": 4,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 73,
-        "raises": 73,
-        "calls": 25,
-        "folds": 48,
-        "checks": 71,
-        "allins": 5
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 16,
-        "raises": 16,
-        "calls": 17,
-        "folds": 15,
-        "checks": 54,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 9,
-        "raises": 9,
-        "calls": 5,
-        "folds": 10,
-        "checks": 42,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -393007,
-    "bb_100": -145.4,
-    "bb_sum": 270266.0,
-    "open_size_n": 110,
+    "bb_100": -112.2,
+    "bb_sum": 350266.0,
+    "open_size_n": 111,
     "cbet_n": 48,
     "bet_n": 36,
     "raise_n": 14,
-    "vpip": 0.753,
-    "pfr": 0.663,
+    "vpip": 0.588,
+    "pfr": 0.665,
     "threebet": 0.196,
     "cbet_flop": 0.725,
     "fold_to_cbet": 0.665,
@@ -3374,17 +3374,17 @@
     "fold_to_river": 0.6,
     "wtsd": 0.316,
     "wsd": 0.438,
-    "raise": 0.84,
-    "fold": 0.434,
-    "call": 0.579,
-    "af": 2.93,
-    "open_size_bb": 2.573,
+    "raise": 0.655,
+    "fold": 0.337,
+    "call": 0.45,
+    "af": 2.94,
+    "open_size_bb": 2.572,
     "cbet_size": 0.595,
     "value_bet_size": 0.556,
     "raise_size": 0.519,
-    "sizing_samples": 208,
+    "sizing_samples": 209,
     "archetype": "Maniac (狂徒/高频乱搞)",
-    "is_station": false,
+    "is_station": true,
     "is_nit": false,
     "is_maniac": true,
     "is_passive": false,
@@ -3393,25 +3393,25 @@
   },
   "agent_0087d3b21d316461": {
     "name": "puke-joker",
-    "hands": 661,
+    "hands": 734,
     "metrics": {
       "vpip": {
         "count": 108,
-        "opportunities": 661,
+        "opportunities": 734,
         "has_sample": true,
-        "rate": 0.1634,
-        "confidence": 0.988,
+        "rate": 0.1471,
+        "confidence": 0.9892,
         "population_prior": 0.25,
-        "smoothed_rate": 0.1644
+        "smoothed_rate": 0.1482
       },
       "pfr": {
         "count": 65,
-        "opportunities": 364,
+        "opportunities": 371,
         "has_sample": true,
-        "rate": 0.1786,
-        "confidence": 0.9785,
+        "rate": 0.1752,
+        "confidence": 0.9789,
         "population_prior": 0.18,
-        "smoothed_rate": 0.1786
+        "smoothed_rate": 0.1753
       },
       "threebet": {
         "count": 7,
@@ -3504,9 +3504,9 @@
         "smoothed_rate": 0.5897
       }
     },
-    "vpip_opps": 661,
+    "vpip_opps": 734,
     "vpip_count": 108,
-    "pfr_opps": 364,
+    "pfr_opps": 371,
     "pfr_count": 65,
     "threebet_opps": 257,
     "threebet_count": 7,
@@ -3530,53 +3530,53 @@
     "wsd_count": 19,
     "raises_count": 98,
     "calls_count": 95,
-    "folds_count": 575,
+    "folds_count": 582,
     "bets_count": 98,
     "checks_count": 121,
     "allins_count": 4,
     "street_actions": {
       "preflop": {
-        "bets": 74,
-        "raises": 74,
-        "calls": 38,
-        "folds": 542,
-        "checks": 8,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 15,
-        "raises": 15,
-        "calls": 32,
-        "folds": 17,
-        "checks": 48,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 16,
-        "folds": 10,
-        "checks": 37,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 4,
-        "raises": 4,
-        "calls": 9,
-        "folds": 6,
-        "checks": 28,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -124866,
-    "bb_100": -18.9,
-    "bb_sum": 661000.0,
+    "bb_100": -17.0,
+    "bb_sum": 734000.0,
     "open_size_n": 65,
     "cbet_n": 10,
     "bet_n": 10,
     "raise_n": 4,
-    "vpip": 0.164,
-    "pfr": 0.179,
+    "vpip": 0.148,
+    "pfr": 0.175,
     "threebet": 0.029,
     "cbet_flop": 0.554,
     "fold_to_cbet": 0.314,
@@ -3586,9 +3586,9 @@
     "fold_to_river": 0.383,
     "wtsd": 0.407,
     "wsd": 0.59,
-    "raise": 0.148,
-    "fold": 0.866,
-    "call": 0.146,
+    "raise": 0.134,
+    "fold": 0.79,
+    "call": 0.131,
     "af": 2.06,
     "open_size_bb": 2.255,
     "cbet_size": 0.37,
@@ -3748,36 +3748,36 @@
     "allins_count": 34,
     "street_actions": {
       "preflop": {
-        "bets": 133,
-        "raises": 133,
-        "calls": 29,
-        "folds": 3962,
-        "checks": 43,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 54,
-        "raises": 54,
-        "calls": 2,
-        "folds": 35,
-        "checks": 35,
-        "allins": 29
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 11,
-        "raises": 11,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 9,
-        "checks": 19,
-        "allins": 1
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 8,
-        "raises": 8,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 6,
-        "checks": 8,
-        "allins": 1
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -689426,
@@ -3960,36 +3960,36 @@
     "allins_count": 7,
     "street_actions": {
       "preflop": {
-        "bets": 64,
-        "raises": 64,
-        "calls": 272,
-        "folds": 180,
-        "checks": 13,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 27,
-        "folds": 91,
-        "checks": 134,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 30,
-        "raises": 30,
-        "calls": 17,
-        "folds": 19,
-        "checks": 58,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 19,
-        "raises": 19,
-        "calls": 9,
-        "folds": 7,
-        "checks": 45,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -632211,
@@ -4172,36 +4172,36 @@
     "allins_count": 11,
     "street_actions": {
       "preflop": {
-        "bets": 223,
-        "raises": 223,
-        "calls": 126,
-        "folds": 1361,
-        "checks": 8,
-        "allins": 6
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 65,
-        "raises": 65,
-        "calls": 34,
-        "folds": 71,
-        "checks": 84,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 27,
-        "raises": 27,
-        "calls": 10,
-        "folds": 28,
-        "checks": 47,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 12,
-        "raises": 12,
-        "calls": 3,
-        "folds": 13,
-        "checks": 37,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 346734,
@@ -4384,36 +4384,36 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 27,
-        "raises": 27,
-        "calls": 11,
-        "folds": 70,
-        "checks": 1,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 7,
-        "raises": 7,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 6,
-        "checks": 6,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 3,
-        "raises": 3,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 1,
-        "checks": 5,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 1,
-        "raises": 1,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 1,
-        "checks": 5,
-        "allins": 1
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -154650,
@@ -4453,16 +4453,16 @@
   },
   "agent_9e85267bd89c5d0f": {
     "name": "IM BACK",
-    "hands": 1851,
+    "hands": 1991,
     "metrics": {
       "vpip": {
         "count": 321,
-        "opportunities": 1851,
+        "opportunities": 1991,
         "has_sample": true,
-        "rate": 0.1734,
-        "confidence": 0.9957,
+        "rate": 0.1612,
+        "confidence": 0.996,
         "population_prior": 0.25,
-        "smoothed_rate": 0.1737
+        "smoothed_rate": 0.1616
       },
       "pfr": {
         "count": 181,
@@ -4564,7 +4564,7 @@
         "smoothed_rate": 0.4474
       }
     },
-    "vpip_opps": 1851,
+    "vpip_opps": 1991,
     "vpip_count": 321,
     "pfr_opps": 1011,
     "pfr_count": 181,
@@ -4596,46 +4596,46 @@
     "allins_count": 12,
     "street_actions": {
       "preflop": {
-        "bets": 297,
-        "raises": 297,
-        "calls": 119,
-        "folds": 1510,
-        "checks": 19,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 119,
-        "raises": 119,
-        "calls": 69,
-        "folds": 14,
-        "checks": 77,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 62,
-        "raises": 62,
-        "calls": 35,
-        "folds": 2,
-        "checks": 59,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 44,
-        "raises": 44,
-        "calls": 28,
-        "folds": 3,
-        "checks": 47,
-        "allins": 6
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -272408,
-    "bb_100": -14.7,
-    "bb_sum": 1847479.0,
+    "bb_100": -13.7,
+    "bb_sum": 1987479.0,
     "open_size_n": 181,
     "cbet_n": 62,
     "bet_n": 113,
     "raise_n": 50,
-    "vpip": 0.174,
+    "vpip": 0.162,
     "pfr": 0.179,
     "threebet": 0.069,
     "cbet_flop": 0.678,
@@ -4646,9 +4646,9 @@
     "fold_to_river": 0.148,
     "wtsd": 0.471,
     "wsd": 0.447,
-    "raise": 0.281,
-    "fold": 0.825,
-    "call": 0.136,
+    "raise": 0.262,
+    "fold": 0.767,
+    "call": 0.127,
     "af": 4.16,
     "open_size_bb": 2.26,
     "cbet_size": 0.388,
@@ -4808,35 +4808,35 @@
     "allins_count": 36,
     "street_actions": {
       "preflop": {
-        "bets": 385,
-        "raises": 385,
-        "calls": 133,
-        "folds": 2639,
-        "checks": 88,
-        "allins": 28
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 117,
-        "raises": 117,
-        "calls": 63,
-        "folds": 90,
-        "checks": 184,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 54,
-        "raises": 54,
-        "calls": 29,
-        "folds": 40,
-        "checks": 124,
-        "allins": 6
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 18,
-        "raises": 18,
-        "calls": 11,
-        "folds": 28,
-        "checks": 88,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -5020,36 +5020,36 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 63,
-        "raises": 63,
-        "calls": 166,
-        "folds": 219,
-        "checks": 4,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 23,
-        "raises": 23,
-        "calls": 37,
-        "folds": 48,
-        "checks": 87,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 11,
-        "raises": 11,
-        "calls": 14,
-        "folds": 25,
-        "checks": 65,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 12,
-        "raises": 12,
-        "calls": 11,
-        "folds": 9,
-        "checks": 38,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 150661,
@@ -5232,35 +5232,35 @@
     "allins_count": 71,
     "street_actions": {
       "preflop": {
-        "bets": 602,
-        "raises": 602,
-        "calls": 548,
-        "folds": 2069,
-        "checks": 94,
-        "allins": 65
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 208,
-        "raises": 208,
-        "calls": 125,
-        "folds": 157,
-        "checks": 460,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 65,
-        "raises": 65,
-        "calls": 117,
-        "folds": 66,
-        "checks": 357,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 87,
-        "raises": 87,
-        "calls": 67,
-        "folds": 48,
-        "checks": 256,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -5444,35 +5444,35 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 70,
-        "raises": 70,
-        "calls": 26,
-        "folds": 378,
-        "checks": 8,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 31,
-        "raises": 31,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 24,
-        "checks": 22,
-        "allins": 1
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 1,
-        "raises": 1,
-        "calls": 1,
-        "folds": 6,
-        "checks": 15,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 2,
-        "raises": 2,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 2,
-        "checks": 8,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -5656,35 +5656,35 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 33,
-        "raises": 33,
-        "calls": 14,
-        "folds": 88,
-        "checks": 3,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 17,
-        "raises": 17,
-        "calls": 8,
-        "folds": 5,
-        "checks": 9,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 6,
-        "raises": 6,
-        "calls": 4,
-        "folds": 4,
-        "checks": 7,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 1,
-        "raises": 1,
-        "calls": 1,
-        "folds": 2,
-        "checks": 9,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -5868,35 +5868,35 @@
     "allins_count": 6,
     "street_actions": {
       "preflop": {
-        "bets": 123,
-        "raises": 123,
-        "calls": 149,
-        "folds": 270,
-        "checks": 9,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 46,
-        "raises": 46,
-        "calls": 41,
-        "folds": 46,
-        "checks": 86,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 20,
-        "raises": 20,
-        "calls": 16,
-        "folds": 17,
-        "checks": 60,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 6,
-        "raises": 6,
-        "calls": 4,
-        "folds": 14,
-        "checks": 43,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -6080,35 +6080,35 @@
     "allins_count": 6,
     "street_actions": {
       "preflop": {
-        "bets": 528,
-        "raises": 528,
-        "calls": 120,
-        "folds": 518,
-        "checks": 6,
-        "allins": 5
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 181,
-        "raises": 181,
-        "calls": 25,
-        "folds": 45,
-        "checks": 53,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 79,
-        "raises": 79,
-        "calls": 27,
-        "folds": 21,
-        "checks": 37,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 28,
-        "raises": 28,
-        "calls": 9,
-        "folds": 17,
-        "checks": 35,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -6292,36 +6292,36 @@
     "allins_count": 10,
     "street_actions": {
       "preflop": {
-        "bets": 94,
-        "raises": 94,
-        "calls": 371,
-        "folds": 78,
-        "checks": 10,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 55,
-        "raises": 55,
-        "calls": 70,
-        "folds": 91,
-        "checks": 196,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 37,
-        "raises": 37,
-        "calls": 38,
-        "folds": 43,
-        "checks": 142,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 18,
-        "raises": 18,
-        "calls": 19,
-        "folds": 25,
-        "checks": 115,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -115474,
@@ -6361,16 +6361,16 @@
   },
   "agent_e17087f7b6f8af83": {
     "name": "DX3906",
-    "hands": 40,
+    "hands": 45,
     "metrics": {
       "vpip": {
         "count": 26,
-        "opportunities": 40,
+        "opportunities": 45,
         "has_sample": true,
-        "rate": 0.65,
-        "confidence": 0.8333,
+        "rate": 0.5778,
+        "confidence": 0.8491,
         "population_prior": 0.25,
-        "smoothed_rate": 0.5833
+        "smoothed_rate": 0.5283
       },
       "pfr": {
         "count": 0,
@@ -6472,7 +6472,7 @@
         "smoothed_rate": 0.6
       }
     },
-    "vpip_opps": 40,
+    "vpip_opps": 45,
     "vpip_count": 26,
     "pfr_opps": 22,
     "pfr_count": 0,
@@ -6506,25 +6506,25 @@
       "preflop": {
         "bets": 0,
         "raises": 0,
-        "calls": 35,
-        "folds": 18,
-        "checks": 1,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 3,
-        "raises": 3,
-        "calls": 6,
-        "folds": 13,
-        "checks": 12,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
         "bets": 0,
         "raises": 0,
         "calls": 0,
-        "folds": 1,
-        "checks": 3,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
@@ -6532,18 +6532,18 @@
         "raises": 0,
         "calls": 0,
         "folds": 0,
-        "checks": 3,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": 400000,
-    "bb_100": 1000.0,
-    "bb_sum": 40000.0,
+    "bb_100": 888.9,
+    "bb_sum": 45000.0,
     "open_size_n": 0,
     "cbet_n": 0,
     "bet_n": 2,
     "raise_n": 1,
-    "vpip": 0.583,
+    "vpip": 0.528,
     "pfr": 0.048,
     "threebet": 0.03,
     "cbet_flop": 0.55,
@@ -6554,9 +6554,9 @@
     "fold_to_river": 0.4,
     "wtsd": 0.313,
     "wsd": 0.6,
-    "raise": 0.089,
-    "fold": 0.753,
-    "call": 0.908,
+    "raise": 0.081,
+    "fold": 0.682,
+    "call": 0.822,
     "af": 0.15,
     "open_size_bb": 2.35,
     "cbet_size": 0.47,
@@ -6716,36 +6716,36 @@
     "allins_count": 5,
     "street_actions": {
       "preflop": {
-        "bets": 85,
-        "raises": 85,
-        "calls": 35,
-        "folds": 355,
-        "checks": 9,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 7,
-        "folds": 23,
-        "checks": 30,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 8,
-        "folds": 6,
-        "checks": 19,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 1,
-        "folds": 5,
-        "checks": 13,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 72805,
@@ -6785,16 +6785,16 @@
   },
   "agent_a58f741f5a33d0b1": {
     "name": "赚够一百就回家",
-    "hands": 160,
+    "hands": 166,
     "metrics": {
       "vpip": {
         "count": 120,
-        "opportunities": 160,
+        "opportunities": 166,
         "has_sample": true,
-        "rate": 0.75,
-        "confidence": 0.9524,
+        "rate": 0.7229,
+        "confidence": 0.954,
         "population_prior": 0.25,
-        "smoothed_rate": 0.7262
+        "smoothed_rate": 0.7011
       },
       "pfr": {
         "count": 73,
@@ -6896,7 +6896,7 @@
         "smoothed_rate": 0.6154
       }
     },
-    "vpip_opps": 160,
+    "vpip_opps": 166,
     "vpip_count": 120,
     "pfr_opps": 106,
     "pfr_count": 73,
@@ -6928,46 +6928,46 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 77,
-        "raises": 77,
-        "calls": 59,
-        "folds": 43,
-        "checks": 3,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 49,
-        "raises": 49,
-        "calls": 17,
-        "folds": 19,
-        "checks": 21,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 14,
-        "raises": 14,
-        "calls": 7,
-        "folds": 12,
-        "checks": 17,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 3,
-        "raises": 3,
-        "calls": 3,
-        "folds": 7,
-        "checks": 14,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": 35912,
-    "bb_100": 22.4,
-    "bb_sum": 160000.0,
+    "bb_100": 21.6,
+    "bb_sum": 166000.0,
     "open_size_n": 73,
     "cbet_n": 24,
     "bet_n": 38,
     "raise_n": 4,
-    "vpip": 0.726,
+    "vpip": 0.701,
     "pfr": 0.653,
     "threebet": 0.059,
     "cbet_flop": 0.789,
@@ -6978,9 +6978,9 @@
     "fold_to_river": 0.567,
     "wtsd": 0.227,
     "wsd": 0.615,
-    "raise": 0.859,
-    "fold": 0.507,
-    "call": 0.527,
+    "raise": 0.829,
+    "fold": 0.489,
+    "call": 0.509,
     "af": 3.33,
     "open_size_bb": 2.808,
     "cbet_size": 0.638,
@@ -6997,16 +6997,16 @@
   },
   "agent_b14b926709f89a18": {
     "name": "Marvellous",
-    "hands": 316,
+    "hands": 317,
     "metrics": {
       "vpip": {
         "count": 260,
-        "opportunities": 316,
+        "opportunities": 317,
         "has_sample": true,
-        "rate": 0.8228,
-        "confidence": 0.9753,
+        "rate": 0.8202,
+        "confidence": 0.9754,
         "population_prior": 0.25,
-        "smoothed_rate": 0.8086
+        "smoothed_rate": 0.8062
       },
       "pfr": {
         "count": 162,
@@ -7108,7 +7108,7 @@
         "smoothed_rate": 0.383
       }
     },
-    "vpip_opps": 316,
+    "vpip_opps": 317,
     "vpip_count": 260,
     "pfr_opps": 205,
     "pfr_count": 162,
@@ -7140,46 +7140,46 @@
     "allins_count": 30,
     "street_actions": {
       "preflop": {
-        "bets": 192,
-        "raises": 192,
-        "calls": 127,
-        "folds": 61,
-        "checks": 1,
-        "allins": 21
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 80,
-        "raises": 80,
-        "calls": 29,
-        "folds": 34,
-        "checks": 39,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 42,
-        "raises": 42,
-        "calls": 11,
-        "folds": 10,
-        "checks": 7,
-        "allins": 5
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 16,
-        "raises": 16,
-        "calls": 4,
-        "folds": 7,
-        "checks": 8,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -618412,
-    "bb_100": -195.7,
-    "bb_sum": 316000.0,
+    "bb_100": -195.1,
+    "bb_sum": 317000.0,
     "open_size_n": 162,
     "cbet_n": 38,
     "bet_n": 82,
     "raise_n": 18,
-    "vpip": 0.809,
+    "vpip": 0.806,
     "pfr": 0.767,
     "threebet": 0.211,
     "cbet_flop": 0.815,
@@ -7190,9 +7190,9 @@
     "fold_to_river": 0.484,
     "wtsd": 0.257,
     "wsd": 0.383,
-    "raise": 1.022,
-    "fold": 0.359,
-    "call": 0.536,
+    "raise": 1.019,
+    "fold": 0.357,
+    "call": 0.534,
     "af": 3.86,
     "open_size_bb": 3.85,
     "cbet_size": 0.56,
@@ -7352,35 +7352,35 @@
     "allins_count": 4,
     "street_actions": {
       "preflop": {
-        "bets": 104,
-        "raises": 104,
-        "calls": 52,
-        "folds": 524,
-        "checks": 25,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 16,
-        "folds": 44,
-        "checks": 68,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 19,
-        "raises": 19,
-        "calls": 4,
-        "folds": 21,
-        "checks": 32,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 1,
-        "folds": 6,
-        "checks": 24,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -7421,25 +7421,25 @@
   },
   "agent_b7e5a9253cb39c1e": {
     "name": "破壳",
-    "hands": 306,
+    "hands": 363,
     "metrics": {
       "vpip": {
-        "count": 95,
-        "opportunities": 306,
+        "count": 96,
+        "opportunities": 363,
         "has_sample": true,
-        "rate": 0.3105,
-        "confidence": 0.9745,
+        "rate": 0.2645,
+        "confidence": 0.9784,
         "population_prior": 0.25,
-        "smoothed_rate": 0.3089
+        "smoothed_rate": 0.2642
       },
       "pfr": {
         "count": 36,
-        "opportunities": 177,
+        "opportunities": 179,
         "has_sample": true,
-        "rate": 0.2034,
-        "confidence": 0.9568,
+        "rate": 0.2011,
+        "confidence": 0.9572,
         "population_prior": 0.18,
-        "smoothed_rate": 0.2024
+        "smoothed_rate": 0.2002
       },
       "threebet": {
         "count": 3,
@@ -7532,9 +7532,9 @@
         "smoothed_rate": 0.4167
       }
     },
-    "vpip_opps": 306,
-    "vpip_count": 95,
-    "pfr_opps": 177,
+    "vpip_opps": 363,
+    "vpip_count": 96,
+    "pfr_opps": 179,
     "pfr_count": 36,
     "threebet_opps": 130,
     "threebet_count": 3,
@@ -7557,54 +7557,54 @@
     "wsd_opps": 28,
     "wsd_count": 11,
     "raises_count": 65,
-    "calls_count": 92,
-    "folds_count": 248,
+    "calls_count": 93,
+    "folds_count": 249,
     "bets_count": 65,
     "checks_count": 113,
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 39,
-        "raises": 39,
-        "calls": 59,
-        "folds": 219,
-        "checks": 11,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 1,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 14,
-        "raises": 14,
-        "calls": 17,
-        "folds": 16,
-        "checks": 50,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 9,
-        "raises": 9,
-        "calls": 9,
-        "folds": 9,
-        "checks": 30,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 3,
-        "raises": 3,
-        "calls": 7,
-        "folds": 4,
-        "checks": 22,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -142138,
-    "bb_100": -46.5,
-    "bb_sum": 306000.0,
+    "bb_100": -39.2,
+    "bb_sum": 363000.0,
     "open_size_n": 36,
     "cbet_n": 4,
     "bet_n": 19,
     "raise_n": 3,
-    "vpip": 0.309,
-    "pfr": 0.202,
+    "vpip": 0.264,
+    "pfr": 0.2,
     "threebet": 0.027,
     "cbet_flop": 0.365,
     "fold_to_cbet": 0.504,
@@ -7614,22 +7614,22 @@
     "fold_to_river": 0.379,
     "wtsd": 0.362,
     "wsd": 0.417,
-    "raise": 0.211,
-    "fold": 0.803,
-    "call": 0.301,
-    "af": 1.41,
+    "raise": 0.179,
+    "fold": 0.682,
+    "call": 0.258,
+    "af": 1.4,
     "open_size_bb": 2.517,
     "cbet_size": 0.639,
     "value_bet_size": 0.916,
     "raise_size": 0.935,
     "sizing_samples": 62,
-    "archetype": "LAG (松凶强手)",
+    "archetype": "TAG (紧凶稳健)",
     "is_station": false,
     "is_nit": false,
     "is_maniac": false,
     "is_passive": false,
     "is_pushfold": false,
-    "exploit_advice": "位置劣势避免玩投机牌；后位利用位置优势做3-bet施压，警惕其转牌河牌连开两枪。"
+    "exploit_advice": "尊重其早位Open和3-Bet范围；多在底池较小或有位置时针对其翻牌Miss的牌面浮动跟注偷底。"
   },
   "agent_b321871d2e1ecad9": {
     "name": "竹子",
@@ -7776,35 +7776,35 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 56,
-        "raises": 56,
-        "calls": 22,
-        "folds": 285,
-        "checks": 5,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 14,
-        "raises": 14,
-        "calls": 7,
-        "folds": 7,
-        "checks": 31,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 7,
-        "raises": 7,
-        "calls": 2,
-        "folds": 6,
-        "checks": 23,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 2,
-        "raises": 2,
-        "calls": 2,
-        "folds": 3,
-        "checks": 21,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -7988,35 +7988,35 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 66,
-        "raises": 66,
-        "calls": 24,
-        "folds": 232,
-        "checks": 11,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 5,
-        "folds": 22,
-        "checks": 43,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 8,
-        "raises": 8,
-        "calls": 2,
-        "folds": 8,
-        "checks": 22,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 7,
-        "raises": 7,
-        "calls": 3,
-        "folds": 3,
-        "checks": 13,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -8026,7 +8026,7 @@
     "open_size_n": 64,
     "cbet_n": 6,
     "bet_n": 19,
-    "raise_n": 0,
+    "raise_n": 22,
     "vpip": 0.268,
     "pfr": 0.322,
     "threebet": 0.021,
@@ -8046,7 +8046,7 @@
     "cbet_size": 0.467,
     "value_bet_size": 0.538,
     "raise_size": 0.68,
-    "sizing_samples": 89,
+    "sizing_samples": 111,
     "archetype": "TAG (紧凶稳健)",
     "is_station": false,
     "is_nit": false,
@@ -8057,16 +8057,16 @@
   },
   "agent_b13956e880e2e935": {
     "name": "ffer",
-    "hands": 141,
+    "hands": 153,
     "metrics": {
       "vpip": {
         "count": 62,
-        "opportunities": 141,
+        "opportunities": 153,
         "has_sample": true,
-        "rate": 0.4397,
-        "confidence": 0.9463,
+        "rate": 0.4052,
+        "confidence": 0.9503,
         "population_prior": 0.25,
-        "smoothed_rate": 0.4295
+        "smoothed_rate": 0.3975
       },
       "pfr": {
         "count": 40,
@@ -8168,7 +8168,7 @@
         "smoothed_rate": 0.5
       }
     },
-    "vpip_opps": 141,
+    "vpip_opps": 153,
     "vpip_count": 62,
     "pfr_opps": 78,
     "pfr_count": 40,
@@ -8200,46 +8200,46 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 45,
-        "raises": 45,
-        "calls": 26,
-        "folds": 83,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
         "checks": 0,
-        "allins": 1
+        "allins": 0
       },
       "flop": {
-        "bets": 23,
-        "raises": 23,
-        "calls": 4,
-        "folds": 12,
-        "checks": 11,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 1,
-        "folds": 6,
-        "checks": 3,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 1,
-        "raises": 1,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 2,
-        "checks": 1,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": 77000,
-    "bb_100": 54.6,
-    "bb_sum": 141000.0,
+    "bb_100": 50.3,
+    "bb_sum": 153000.0,
     "open_size_n": 40,
     "cbet_n": 9,
     "bet_n": 14,
     "raise_n": 6,
-    "vpip": 0.429,
+    "vpip": 0.398,
     "pfr": 0.482,
     "threebet": 0.075,
     "cbet_flop": 0.638,
@@ -8250,35 +8250,35 @@
     "fold_to_river": 0.467,
     "wtsd": 0.085,
     "wsd": 0.5,
-    "raise": 0.505,
-    "fold": 0.719,
-    "call": 0.225,
+    "raise": 0.468,
+    "fold": 0.666,
+    "call": 0.208,
     "af": 4.77,
     "open_size_bb": 2.757,
     "cbet_size": 0.612,
     "value_bet_size": 0.576,
     "raise_size": 1.113,
     "sizing_samples": 69,
-    "archetype": "Maniac (狂徒/高频乱搞)",
+    "archetype": "LAG (松凶强手)",
     "is_station": false,
     "is_nit": false,
-    "is_maniac": true,
+    "is_maniac": false,
     "is_passive": false,
     "is_pushfold": false,
-    "exploit_advice": "绝不河牌纯诈唬；顶对/中对放宽抓诈(Bluff-catch)；手握强牌翻前翻后多做Check-raise引诱其推注。"
+    "exploit_advice": "位置劣势避免玩投机牌；后位利用位置优势做3-bet施压，警惕其转牌河牌连开两枪。"
   },
   "agent_2e280ad138b0c434": {
     "name": "L90",
-    "hands": 1096,
+    "hands": 1106,
     "metrics": {
       "vpip": {
         "count": 173,
-        "opportunities": 1096,
+        "opportunities": 1106,
         "has_sample": true,
-        "rate": 0.1578,
+        "rate": 0.1564,
         "confidence": 0.9928,
         "population_prior": 0.25,
-        "smoothed_rate": 0.1585
+        "smoothed_rate": 0.1571
       },
       "pfr": {
         "count": 95,
@@ -8380,7 +8380,7 @@
         "smoothed_rate": 0.5294
       }
     },
-    "vpip_opps": 1096,
+    "vpip_opps": 1106,
     "vpip_count": 173,
     "pfr_opps": 664,
     "pfr_count": 95,
@@ -8412,46 +8412,46 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 118,
-        "raises": 118,
-        "calls": 83,
-        "folds": 926,
-        "checks": 8,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 22,
-        "raises": 22,
-        "calls": 14,
-        "folds": 39,
-        "checks": 63,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 11,
-        "raises": 11,
-        "calls": 6,
-        "folds": 11,
-        "checks": 36,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 14,
-        "raises": 14,
-        "calls": 2,
-        "folds": 8,
-        "checks": 21,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -416300,
-    "bb_100": -38.0,
-    "bb_sum": 1094240.0,
+    "bb_100": -37.7,
+    "bb_sum": 1104240.0,
     "open_size_n": 95,
     "cbet_n": 15,
     "bet_n": 29,
     "raise_n": 3,
-    "vpip": 0.159,
+    "vpip": 0.157,
     "pfr": 0.143,
     "threebet": 0.034,
     "cbet_flop": 0.497,
@@ -8462,8 +8462,8 @@
     "fold_to_river": 0.622,
     "wtsd": 0.243,
     "wsd": 0.529,
-    "raise": 0.151,
-    "fold": 0.895,
+    "raise": 0.149,
+    "fold": 0.887,
     "call": 0.097,
     "af": 3.14,
     "open_size_bb": 2.403,
@@ -8624,36 +8624,36 @@
     "allins_count": 4,
     "street_actions": {
       "preflop": {
-        "bets": 40,
-        "raises": 40,
-        "calls": 62,
-        "folds": 59,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
         "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 22,
-        "raises": 22,
-        "calls": 19,
-        "folds": 4,
-        "checks": 29,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 15,
-        "raises": 15,
-        "calls": 11,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
         "folds": 0,
-        "checks": 20,
-        "allins": 2
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 6,
-        "raises": 6,
-        "calls": 1,
-        "folds": 8,
-        "checks": 17,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -192998,
@@ -8693,25 +8693,25 @@
   },
   "agent_3bf751494602a984": {
     "name": "来都来了",
-    "hands": 1051,
+    "hands": 1078,
     "metrics": {
       "vpip": {
         "count": 179,
-        "opportunities": 1051,
+        "opportunities": 1078,
         "has_sample": true,
-        "rate": 0.1703,
-        "confidence": 0.9924,
+        "rate": 0.166,
+        "confidence": 0.9926,
         "population_prior": 0.25,
-        "smoothed_rate": 0.1709
+        "smoothed_rate": 0.1667
       },
       "pfr": {
         "count": 51,
-        "opportunities": 614,
+        "opportunities": 616,
         "has_sample": true,
-        "rate": 0.0831,
-        "confidence": 0.9871,
+        "rate": 0.0828,
+        "confidence": 0.9872,
         "population_prior": 0.18,
-        "smoothed_rate": 0.0843
+        "smoothed_rate": 0.084
       },
       "threebet": {
         "count": 11,
@@ -8804,9 +8804,9 @@
         "smoothed_rate": 0.4792
       }
     },
-    "vpip_opps": 1051,
+    "vpip_opps": 1078,
     "vpip_count": 179,
-    "pfr_opps": 614,
+    "pfr_opps": 616,
     "pfr_count": 51,
     "threebet_opps": 390,
     "threebet_count": 11,
@@ -8830,52 +8830,52 @@
     "wsd_count": 19,
     "raises_count": 209,
     "calls_count": 188,
-    "folds_count": 856,
+    "folds_count": 858,
     "bets_count": 209,
     "checks_count": 109,
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 66,
-        "raises": 66,
-        "calls": 153,
-        "folds": 823,
-        "checks": 15,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 2,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 76,
-        "raises": 76,
-        "calls": 15,
-        "folds": 24,
-        "checks": 53,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 41,
-        "raises": 41,
-        "calls": 12,
-        "folds": 6,
-        "checks": 29,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 26,
-        "raises": 26,
-        "calls": 8,
-        "folds": 3,
-        "checks": 12,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -93978,
-    "bb_100": -8.9,
-    "bb_sum": 1051000.0,
+    "bb_100": -8.7,
+    "bb_sum": 1078000.0,
     "open_size_n": 51,
     "cbet_n": 7,
     "bet_n": 86,
     "raise_n": 50,
-    "vpip": 0.171,
+    "vpip": 0.167,
     "pfr": 0.084,
     "threebet": 0.029,
     "cbet_flop": 0.57,
@@ -8886,9 +8886,9 @@
     "fold_to_river": 0.326,
     "wtsd": 0.288,
     "wsd": 0.479,
-    "raise": 0.199,
-    "fold": 0.812,
-    "call": 0.18,
+    "raise": 0.194,
+    "fold": 0.794,
+    "call": 0.175,
     "af": 2.22,
     "open_size_bb": 2.898,
     "cbet_size": 0.445,
@@ -9048,35 +9048,35 @@
     "allins_count": 11,
     "street_actions": {
       "preflop": {
-        "bets": 123,
-        "raises": 123,
-        "calls": 59,
-        "folds": 348,
-        "checks": 9,
-        "allins": 10
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 45,
-        "raises": 45,
-        "calls": 8,
-        "folds": 31,
-        "checks": 33,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 14,
-        "raises": 14,
-        "calls": 2,
-        "folds": 14,
-        "checks": 35,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 13,
-        "raises": 13,
-        "calls": 1,
-        "folds": 9,
-        "checks": 17,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -9260,35 +9260,35 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 88,
-        "raises": 88,
-        "calls": 41,
-        "folds": 209,
-        "checks": 3,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 29,
-        "raises": 29,
-        "calls": 14,
-        "folds": 22,
-        "checks": 25,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 6,
-        "folds": 11,
-        "checks": 17,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 7,
-        "raises": 7,
-        "calls": 2,
-        "folds": 4,
-        "checks": 5,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -9329,16 +9329,16 @@
   },
   "agent_d489c97b3c7f274d": {
     "name": "河牌见",
-    "hands": 539,
+    "hands": 573,
     "metrics": {
       "vpip": {
         "count": 249,
-        "opportunities": 539,
+        "opportunities": 573,
         "has_sample": true,
-        "rate": 0.462,
-        "confidence": 0.9854,
+        "rate": 0.4346,
+        "confidence": 0.9862,
         "population_prior": 0.25,
-        "smoothed_rate": 0.4589
+        "smoothed_rate": 0.432
       },
       "pfr": {
         "count": 159,
@@ -9440,7 +9440,7 @@
         "smoothed_rate": 0.5577
       }
     },
-    "vpip_opps": 539,
+    "vpip_opps": 573,
     "vpip_count": 249,
     "pfr_opps": 324,
     "pfr_count": 159,
@@ -9472,46 +9472,46 @@
     "allins_count": 6,
     "street_actions": {
       "preflop": {
-        "bets": 173,
-        "raises": 173,
-        "calls": 92,
-        "folds": 296,
-        "checks": 19,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 76,
-        "raises": 76,
-        "calls": 33,
-        "folds": 37,
-        "checks": 64,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 41,
-        "raises": 41,
-        "calls": 21,
-        "folds": 26,
-        "checks": 48,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 21,
-        "raises": 21,
-        "calls": 10,
-        "folds": 20,
-        "checks": 28,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 48045,
-    "bb_100": 8.9,
-    "bb_sum": 539000.0,
+    "bb_100": 8.4,
+    "bb_sum": 573000.0,
     "open_size_n": 159,
     "cbet_n": 42,
     "bet_n": 87,
     "raise_n": 9,
-    "vpip": 0.459,
+    "vpip": 0.432,
     "pfr": 0.483,
     "threebet": 0.058,
     "cbet_flop": 0.761,
@@ -9522,9 +9522,9 @@
     "fold_to_river": 0.652,
     "wtsd": 0.258,
     "wsd": 0.558,
-    "raise": 0.571,
-    "fold": 0.7,
-    "call": 0.29,
+    "raise": 0.537,
+    "fold": 0.659,
+    "call": 0.273,
     "af": 3.99,
     "open_size_bb": 2.475,
     "cbet_size": 0.416,
@@ -9541,16 +9541,16 @@
   },
   "agent_4a4a0501d9633d55": {
     "name": "全体起立",
-    "hands": 356,
+    "hands": 369,
     "metrics": {
       "vpip": {
         "count": 206,
-        "opportunities": 356,
+        "opportunities": 369,
         "has_sample": true,
-        "rate": 0.5787,
-        "confidence": 0.978,
+        "rate": 0.5583,
+        "confidence": 0.9788,
         "population_prior": 0.25,
-        "smoothed_rate": 0.5714
+        "smoothed_rate": 0.5517
       },
       "pfr": {
         "count": 31,
@@ -9652,7 +9652,7 @@
         "smoothed_rate": 0.4828
       }
     },
-    "vpip_opps": 356,
+    "vpip_opps": 369,
     "vpip_count": 206,
     "pfr_opps": 192,
     "pfr_count": 31,
@@ -9684,46 +9684,46 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 38,
-        "raises": 38,
-        "calls": 217,
-        "folds": 173,
-        "checks": 1,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 29,
-        "raises": 29,
-        "calls": 45,
-        "folds": 55,
-        "checks": 76,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 16,
-        "folds": 22,
-        "checks": 37,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 24,
-        "raises": 24,
-        "calls": 8,
-        "folds": 9,
-        "checks": 25,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -291411,
-    "bb_100": -81.9,
-    "bb_sum": 356000.0,
+    "bb_100": -79.0,
+    "bb_sum": 369000.0,
     "open_size_n": 31,
     "cbet_n": 9,
     "bet_n": 72,
     "raise_n": 3,
-    "vpip": 0.571,
+    "vpip": 0.552,
     "pfr": 0.162,
     "threebet": 0.019,
     "cbet_flop": 0.638,
@@ -9734,9 +9734,9 @@
     "fold_to_river": 0.508,
     "wtsd": 0.31,
     "wsd": 0.483,
-    "raise": 0.339,
-    "fold": 0.723,
-    "call": 0.793,
+    "raise": 0.327,
+    "fold": 0.698,
+    "call": 0.765,
     "af": 0.85,
     "open_size_bb": 3.026,
     "cbet_size": 0.314,
@@ -9896,36 +9896,36 @@
     "allins_count": 4,
     "street_actions": {
       "preflop": {
-        "bets": 32,
-        "raises": 32,
-        "calls": 160,
-        "folds": 174,
-        "checks": 5,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 34,
-        "raises": 34,
-        "calls": 27,
-        "folds": 37,
-        "checks": 77,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 33,
-        "raises": 33,
-        "calls": 10,
-        "folds": 15,
-        "checks": 46,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 17,
-        "raises": 17,
-        "calls": 11,
-        "folds": 5,
-        "checks": 29,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 118000,
@@ -9965,16 +9965,16 @@
   },
   "agent_c9494e83afb8d8d7": {
     "name": "迷雾",
-    "hands": 144,
+    "hands": 172,
     "metrics": {
       "vpip": {
         "count": 36,
-        "opportunities": 144,
+        "opportunities": 172,
         "has_sample": true,
-        "rate": 0.25,
-        "confidence": 0.9474,
+        "rate": 0.2093,
+        "confidence": 0.9556,
         "population_prior": 0.25,
-        "smoothed_rate": 0.25
+        "smoothed_rate": 0.2111
       },
       "pfr": {
         "count": 28,
@@ -10076,7 +10076,7 @@
         "smoothed_rate": 0.5
       }
     },
-    "vpip_opps": 144,
+    "vpip_opps": 172,
     "vpip_count": 36,
     "pfr_opps": 86,
     "pfr_count": 28,
@@ -10108,46 +10108,46 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 32,
-        "raises": 32,
-        "calls": 6,
-        "folds": 110,
-        "checks": 1,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 3,
-        "folds": 3,
-        "checks": 9,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 1,
-        "folds": 6,
-        "checks": 7,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 2,
-        "raises": 2,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 1,
-        "checks": 4,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
     "net_pnl": -20300,
-    "bb_100": -14.1,
-    "bb_sum": 144000.0,
+    "bb_100": -11.8,
+    "bb_sum": 172000.0,
     "open_size_n": 28,
     "cbet_n": 9,
     "bet_n": 6,
     "raise_n": 2,
-    "vpip": 0.25,
+    "vpip": 0.211,
     "pfr": 0.313,
     "threebet": 0.064,
     "cbet_flop": 0.638,
@@ -10158,9 +10158,9 @@
     "fold_to_river": 0.467,
     "wtsd": 0.221,
     "wsd": 0.5,
-    "raise": 0.331,
-    "fold": 0.817,
-    "call": 0.083,
+    "raise": 0.279,
+    "fold": 0.69,
+    "call": 0.07,
     "af": 9.8,
     "open_size_bb": 2.014,
     "cbet_size": 0.438,
@@ -10320,35 +10320,35 @@
     "allins_count": 9,
     "street_actions": {
       "preflop": {
-        "bets": 178,
-        "raises": 178,
-        "calls": 27,
-        "folds": 320,
-        "checks": 4,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 72,
-        "raises": 72,
-        "calls": 10,
-        "folds": 28,
-        "checks": 19,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 40,
-        "raises": 40,
-        "calls": 2,
-        "folds": 3,
-        "checks": 12,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 11,
-        "raises": 11,
-        "calls": 2,
-        "folds": 1,
-        "checks": 15,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -10532,36 +10532,36 @@
     "allins_count": 44,
     "street_actions": {
       "preflop": {
-        "bets": 371,
-        "raises": 371,
-        "calls": 436,
-        "folds": 1316,
-        "checks": 30,
-        "allins": 31
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 83,
-        "raises": 83,
-        "calls": 175,
-        "folds": 178,
-        "checks": 235,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 55,
-        "raises": 55,
-        "calls": 78,
-        "folds": 54,
-        "checks": 162,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 43,
-        "raises": 43,
-        "calls": 25,
-        "folds": 43,
-        "checks": 124,
-        "allins": 8
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 260764,
@@ -10744,35 +10744,35 @@
     "allins_count": 1,
     "street_actions": {
       "preflop": {
-        "bets": 27,
-        "raises": 27,
-        "calls": 16,
-        "folds": 117,
-        "checks": 2,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 13,
-        "raises": 13,
-        "calls": 3,
-        "folds": 6,
-        "checks": 10,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 3,
-        "raises": 3,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 2,
-        "checks": 8,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 1,
-        "raises": 1,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
         "folds": 0,
-        "checks": 7,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -10956,35 +10956,35 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 85,
-        "raises": 85,
-        "calls": 34,
-        "folds": 331,
-        "checks": 4,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 40,
-        "raises": 40,
-        "calls": 8,
-        "folds": 20,
-        "checks": 21,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 15,
-        "raises": 15,
-        "calls": 5,
-        "folds": 9,
-        "checks": 18,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 2,
-        "raises": 2,
-        "calls": 2,
-        "folds": 8,
-        "checks": 19,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -11168,36 +11168,36 @@
     "allins_count": 6,
     "street_actions": {
       "preflop": {
-        "bets": 2,
-        "raises": 2,
-        "calls": 80,
-        "folds": 71,
-        "checks": 1,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 26,
-        "raises": 26,
-        "calls": 32,
-        "folds": 6,
-        "checks": 19,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 22,
-        "raises": 22,
-        "calls": 6,
-        "folds": 8,
-        "checks": 16,
-        "allins": 4
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 10,
-        "raises": 10,
-        "calls": 2,
-        "folds": 6,
-        "checks": 10,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 8266,
@@ -11380,35 +11380,35 @@
     "allins_count": 5,
     "street_actions": {
       "preflop": {
-        "bets": 52,
-        "raises": 52,
-        "calls": 42,
-        "folds": 237,
-        "checks": 2,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 28,
-        "raises": 28,
-        "calls": 9,
-        "folds": 12,
-        "checks": 24,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 11,
-        "raises": 11,
-        "calls": 6,
-        "folds": 3,
-        "checks": 11,
-        "allins": 5
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 1,
-        "raises": 1,
-        "calls": 5,
-        "folds": 1,
-        "checks": 9,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -11592,36 +11592,36 @@
     "allins_count": 3,
     "street_actions": {
       "preflop": {
-        "bets": 227,
-        "raises": 227,
-        "calls": 327,
-        "folds": 894,
-        "checks": 31,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 115,
-        "raises": 115,
-        "calls": 37,
-        "folds": 110,
-        "checks": 217,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 66,
-        "raises": 66,
-        "calls": 15,
-        "folds": 50,
-        "checks": 124,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 48,
-        "raises": 48,
-        "calls": 11,
-        "folds": 23,
-        "checks": 94,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 765502,
@@ -11660,17 +11660,17 @@
     "exploit_advice": "位置劣势避免玩投机牌；后位利用位置优势做3-bet施压，警惕其转牌河牌连开两枪。"
   },
   "agent_bd36d1268b892734": {
-    "name": "洗脚不用手",
-    "hands": 434,
+    "name": "叫我汉堡王",
+    "hands": 475,
     "metrics": {
       "vpip": {
         "count": 114,
-        "opportunities": 434,
+        "opportunities": 475,
         "has_sample": true,
-        "rate": 0.2627,
-        "confidence": 0.9819,
+        "rate": 0.24,
+        "confidence": 0.9834,
         "population_prior": 0.25,
-        "smoothed_rate": 0.2624
+        "smoothed_rate": 0.2402
       },
       "pfr": {
         "count": 1,
@@ -11772,7 +11772,7 @@
         "smoothed_rate": 0.3607
       }
     },
-    "vpip_opps": 434,
+    "vpip_opps": 475,
     "vpip_count": 114,
     "pfr_opps": 226,
     "pfr_count": 1,
@@ -11804,46 +11804,46 @@
     "allins_count": 16,
     "street_actions": {
       "preflop": {
-        "bets": 7,
-        "raises": 7,
-        "calls": 114,
-        "folds": 307,
-        "checks": 4,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 28,
-        "raises": 28,
-        "calls": 42,
-        "folds": 8,
-        "checks": 76,
-        "allins": 8
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 19,
-        "raises": 19,
-        "calls": 24,
-        "folds": 3,
-        "checks": 58,
-        "allins": 2
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 15,
-        "raises": 15,
-        "calls": 14,
-        "folds": 11,
-        "checks": 45,
-        "allins": 6
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": -259653,
-    "bb_100": -59.8,
-    "bb_sum": 434000.0,
+    "bb_100": -54.7,
+    "bb_sum": 475000.0,
     "open_size_n": 1,
     "cbet_n": 1,
     "bet_n": 37,
     "raise_n": 24,
-    "vpip": 0.262,
+    "vpip": 0.24,
     "pfr": 0.01,
     "threebet": 0.03,
     "cbet_flop": 0.6,
@@ -11854,9 +11854,9 @@
     "fold_to_river": 0.406,
     "wtsd": 0.462,
     "wsd": 0.361,
-    "raise": 0.159,
-    "fold": 0.754,
-    "call": 0.445,
+    "raise": 0.146,
+    "fold": 0.69,
+    "call": 0.407,
     "af": 0.71,
     "open_size_bb": 2.0,
     "cbet_size": 0.62,
@@ -12016,35 +12016,35 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 5,
-        "raises": 5,
-        "calls": 26,
-        "folds": 134,
-        "checks": 2,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 8,
-        "raises": 8,
-        "calls": 5,
-        "folds": 1,
-        "checks": 13,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 1,
-        "raises": 1,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 3,
-        "checks": 7,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
         "bets": 0,
         "raises": 0,
-        "calls": 1,
+        "calls": 0,
         "folds": 0,
-        "checks": 4,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -12052,7 +12052,7 @@
     "bb_100": -10.1,
     "bb_sum": 161000.0,
     "open_size_n": 3,
-    "cbet_n": 0,
+    "cbet_n": 3,
     "bet_n": 5,
     "raise_n": 4,
     "vpip": 0.195,
@@ -12074,7 +12074,7 @@
     "cbet_size": 0.47,
     "value_bet_size": 1.5,
     "raise_size": 1.5,
-    "sizing_samples": 12,
+    "sizing_samples": 15,
     "archetype": "Balanced (均衡常规)",
     "is_station": false,
     "is_nit": false,
@@ -12228,35 +12228,35 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 8,
-        "raises": 8,
-        "calls": 11,
-        "folds": 208,
-        "checks": 12,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
         "bets": 0,
         "raises": 0,
-        "calls": 1,
-        "folds": 10,
-        "checks": 22,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
         "bets": 0,
         "raises": 0,
         "calls": 0,
-        "folds": 6,
-        "checks": 12,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
         "bets": 0,
         "raises": 0,
         "calls": 0,
-        "folds": 1,
-        "checks": 9,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -12264,9 +12264,9 @@
     "bb_100": -36.7,
     "bb_sum": 238000.0,
     "open_size_n": 7,
-    "cbet_n": 0,
-    "bet_n": 0,
-    "raise_n": 0,
+    "cbet_n": 1,
+    "bet_n": 1,
+    "raise_n": 1,
     "vpip": 0.085,
     "pfr": 0.06,
     "threebet": 0.019,
@@ -12286,7 +12286,7 @@
     "cbet_size": 0.47,
     "value_bet_size": 0.69,
     "raise_size": 0.68,
-    "sizing_samples": 7,
+    "sizing_samples": 10,
     "archetype": "Nit (极紧/岩石)",
     "is_station": false,
     "is_nit": true,
@@ -12440,35 +12440,35 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 44,
-        "raises": 44,
-        "calls": 30,
-        "folds": 134,
-        "checks": 4,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 26,
-        "raises": 26,
-        "calls": 9,
-        "folds": 4,
-        "checks": 13,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 17,
-        "raises": 17,
-        "calls": 7,
-        "folds": 3,
-        "checks": 11,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 8,
-        "raises": 8,
-        "calls": 2,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
         "folds": 0,
-        "checks": 6,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -12652,35 +12652,35 @@
     "allins_count": 14,
     "street_actions": {
       "preflop": {
-        "bets": 182,
-        "raises": 182,
-        "calls": 64,
-        "folds": 863,
-        "checks": 36,
-        "allins": 11
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 14,
-        "folds": 29,
-        "checks": 92,
-        "allins": 3
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
-        "bets": 19,
-        "raises": 19,
-        "calls": 7,
-        "folds": 14,
-        "checks": 68,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 15,
-        "raises": 15,
-        "calls": 5,
-        "folds": 8,
-        "checks": 51,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -12864,27 +12864,27 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 8,
-        "raises": 8,
-        "calls": 4,
-        "folds": 59,
-        "checks": 1,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 2,
-        "raises": 2,
-        "calls": 2,
-        "folds": 5,
-        "checks": 1,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 1,
-        "raises": 1,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 2,
-        "checks": 1,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
@@ -12892,7 +12892,7 @@
         "raises": 0,
         "calls": 0,
         "folds": 0,
-        "checks": 1,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -12902,7 +12902,7 @@
     "open_size_n": 6,
     "cbet_n": 2,
     "bet_n": 1,
-    "raise_n": 0,
+    "raise_n": 2,
     "vpip": 0.177,
     "pfr": 0.158,
     "threebet": 0.067,
@@ -12922,7 +12922,7 @@
     "cbet_size": 0.6,
     "value_bet_size": 0.476,
     "raise_size": 0.68,
-    "sizing_samples": 9,
+    "sizing_samples": 11,
     "archetype": "Nit (极紧/岩石)",
     "is_station": false,
     "is_nit": true,
@@ -13076,36 +13076,36 @@
     "allins_count": 3,
     "street_actions": {
       "preflop": {
-        "bets": 215,
-        "raises": 215,
-        "calls": 30,
-        "folds": 846,
-        "checks": 37,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 82,
-        "raises": 82,
-        "calls": 4,
-        "folds": 47,
-        "checks": 49,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 39,
-        "raises": 39,
-        "calls": 3,
-        "folds": 14,
-        "checks": 25,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "river": {
-        "bets": 19,
-        "raises": 19,
-        "calls": 1,
-        "folds": 9,
-        "checks": 18,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 170685,
@@ -13288,35 +13288,35 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 28,
-        "raises": 28,
-        "calls": 4,
-        "folds": 174,
-        "checks": 4,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "flop": {
-        "bets": 3,
-        "raises": 3,
-        "calls": 8,
-        "folds": 1,
-        "checks": 13,
-        "allins": 1
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       },
       "turn": {
         "bets": 0,
         "raises": 0,
-        "calls": 1,
-        "folds": 7,
-        "checks": 12,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
         "bets": 0,
         "raises": 0,
         "calls": 0,
-        "folds": 1,
-        "checks": 6,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -13325,7 +13325,7 @@
     "bb_sum": 202000.0,
     "open_size_n": 25,
     "cbet_n": 2,
-    "bet_n": 0,
+    "bet_n": 7,
     "raise_n": 1,
     "vpip": 0.157,
     "pfr": 0.193,
@@ -13346,7 +13346,7 @@
     "cbet_size": 0.665,
     "value_bet_size": 0.69,
     "raise_size": 1.387,
-    "sizing_samples": 28,
+    "sizing_samples": 35,
     "archetype": "Nit (极紧/岩石)",
     "is_station": true,
     "is_nit": true,
@@ -13500,27 +13500,27 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 7,
-        "raises": 7,
-        "calls": 3,
-        "folds": 109,
-        "checks": 4,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 3,
-        "raises": 3,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 2,
-        "checks": 6,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
         "bets": 0,
         "raises": 0,
         "calls": 0,
-        "folds": 2,
-        "checks": 1,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
@@ -13528,7 +13528,7 @@
         "raises": 0,
         "calls": 0,
         "folds": 0,
-        "checks": 1,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -13538,7 +13538,7 @@
     "open_size_n": 6,
     "cbet_n": 2,
     "bet_n": 1,
-    "raise_n": 0,
+    "raise_n": 2,
     "vpip": 0.091,
     "pfr": 0.094,
     "threebet": 0.029,
@@ -13558,7 +13558,7 @@
     "cbet_size": 0.518,
     "value_bet_size": 0.5,
     "raise_size": 0.68,
-    "sizing_samples": 9,
+    "sizing_samples": 11,
     "archetype": "Nit (极紧/岩石)",
     "is_station": false,
     "is_nit": true,
@@ -13712,36 +13712,36 @@
     "allins_count": 2,
     "street_actions": {
       "preflop": {
-        "bets": 45,
-        "raises": 45,
-        "calls": 32,
-        "folds": 93,
-        "checks": 3,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 23,
-        "raises": 23,
-        "calls": 11,
-        "folds": 13,
-        "checks": 10,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 9,
-        "raises": 9,
-        "calls": 6,
-        "folds": 6,
-        "checks": 9,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 4,
-        "raises": 4,
+        "bets": 0,
+        "raises": 0,
         "calls": 0,
-        "folds": 4,
-        "checks": 8,
-        "allins": 2
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
       }
     },
     "net_pnl": 78466,
@@ -13924,35 +13924,35 @@
     "allins_count": 0,
     "street_actions": {
       "preflop": {
-        "bets": 44,
-        "raises": 44,
-        "calls": 296,
-        "folds": 241,
-        "checks": 5,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "flop": {
-        "bets": 96,
-        "raises": 96,
-        "calls": 59,
-        "folds": 36,
-        "checks": 104,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "turn": {
-        "bets": 39,
-        "raises": 39,
-        "calls": 37,
-        "folds": 8,
-        "checks": 85,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
         "allins": 0
       },
       "river": {
-        "bets": 31,
-        "raises": 31,
-        "calls": 32,
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
         "folds": 0,
-        "checks": 59,
+        "checks": 0,
         "allins": 0
       }
     },
@@ -13990,5 +13990,641 @@
     "is_passive": false,
     "is_pushfold": false,
     "exploit_advice": "绝不河牌纯诈唬；顶对/中对放宽抓诈(Bluff-catch)；手握强牌翻前翻后多做Check-raise引诱其推注。"
+  },
+  "agent_2344eecf8b30ac7a": {
+    "name": "葫芦娃大王",
+    "hands": 1,
+    "metrics": {
+      "vpip": {
+        "count": 0,
+        "opportunities": 1,
+        "has_sample": true,
+        "rate": 0.0,
+        "confidence": 0.1111,
+        "population_prior": 0.25,
+        "smoothed_rate": 0.2222
+      },
+      "pfr": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.18,
+        "confidence": 0.0,
+        "population_prior": 0.18,
+        "smoothed_rate": 0.18
+      },
+      "threebet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.08,
+        "confidence": 0.0,
+        "population_prior": 0.08,
+        "smoothed_rate": 0.08
+      },
+      "fold_to_threebet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.55,
+        "confidence": 0.0,
+        "population_prior": 0.55,
+        "smoothed_rate": 0.55
+      },
+      "cbet_flop": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.55,
+        "confidence": 0.0,
+        "population_prior": 0.55,
+        "smoothed_rate": 0.55
+      },
+      "fold_to_cbet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.45,
+        "confidence": 0.0,
+        "population_prior": 0.45,
+        "smoothed_rate": 0.45
+      },
+      "turn_barrel": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.45,
+        "confidence": 0.0,
+        "population_prior": 0.45,
+        "smoothed_rate": 0.45
+      },
+      "fold_to_turn": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.42,
+        "confidence": 0.0,
+        "population_prior": 0.42,
+        "smoothed_rate": 0.42
+      },
+      "river_bet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.38,
+        "confidence": 0.0,
+        "population_prior": 0.38,
+        "smoothed_rate": 0.38
+      },
+      "fold_to_river": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.4,
+        "confidence": 0.0,
+        "population_prior": 0.4,
+        "smoothed_rate": 0.4
+      },
+      "wtsd": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.3,
+        "confidence": 0.0,
+        "population_prior": 0.3,
+        "smoothed_rate": 0.3
+      },
+      "wsd": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.5,
+        "confidence": 0.0,
+        "population_prior": 0.5,
+        "smoothed_rate": 0.5
+      }
+    },
+    "vpip_opps": 1,
+    "vpip_count": 0,
+    "pfr_opps": 0,
+    "pfr_count": 0,
+    "threebet_opps": 0,
+    "threebet_count": 0,
+    "fold_to_threebet_opps": 0,
+    "fold_to_threebet_count": 0,
+    "cbet_opps": 0,
+    "cbet_count": 0,
+    "fold_to_cbet_opps": 0,
+    "fold_to_cbet_count": 0,
+    "turn_barrel_opps": 0,
+    "turn_barrel_count": 0,
+    "fold_to_turn_opps": 0,
+    "fold_to_turn_count": 0,
+    "river_bet_opps": 0,
+    "river_bet_count": 0,
+    "fold_to_river_opps": 0,
+    "fold_to_river_count": 0,
+    "wtsd_opps": 0,
+    "wtsd_count": 0,
+    "wsd_opps": 0,
+    "wsd_count": 0,
+    "raises_count": 0,
+    "calls_count": 0,
+    "folds_count": 0,
+    "bets_count": 0,
+    "checks_count": 0,
+    "allins_count": 0,
+    "street_actions": {
+      "preflop": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "flop": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "turn": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "river": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      }
+    },
+    "net_pnl": 0,
+    "bb_100": 0.0,
+    "bb_sum": 1000.0,
+    "open_size_n": 0,
+    "cbet_n": 0,
+    "bet_n": 0,
+    "raise_n": 0,
+    "vpip": 0.222,
+    "pfr": 0.18,
+    "threebet": 0.08,
+    "cbet_flop": 0.55,
+    "fold_to_cbet": 0.45,
+    "turn_barrel": 0.45,
+    "fold_to_turn": 0.42,
+    "river_bet": 0.38,
+    "fold_to_river": 0.4,
+    "wtsd": 0.3,
+    "wsd": 0.5,
+    "raise": 0.142,
+    "fold": 0.462,
+    "call": 0.284,
+    "af": 0.0,
+    "open_size_bb": 2.35,
+    "cbet_size": 0.47,
+    "value_bet_size": 0.69,
+    "raise_size": 0.68,
+    "sizing_samples": 0,
+    "archetype": "TAG (紧凶稳健)",
+    "is_station": false,
+    "is_nit": false,
+    "is_maniac": false,
+    "is_passive": false,
+    "is_pushfold": false,
+    "exploit_advice": "尊重其早位Open和3-Bet范围；多在底池较小或有位置时针对其翻牌Miss的牌面浮动跟注偷底。"
+  },
+  "agent_275cf9383db46925": {
+    "name": "fish_67",
+    "hands": 1,
+    "metrics": {
+      "vpip": {
+        "count": 0,
+        "opportunities": 1,
+        "has_sample": true,
+        "rate": 0.0,
+        "confidence": 0.1111,
+        "population_prior": 0.25,
+        "smoothed_rate": 0.2222
+      },
+      "pfr": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.18,
+        "confidence": 0.0,
+        "population_prior": 0.18,
+        "smoothed_rate": 0.18
+      },
+      "threebet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.08,
+        "confidence": 0.0,
+        "population_prior": 0.08,
+        "smoothed_rate": 0.08
+      },
+      "fold_to_threebet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.55,
+        "confidence": 0.0,
+        "population_prior": 0.55,
+        "smoothed_rate": 0.55
+      },
+      "cbet_flop": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.55,
+        "confidence": 0.0,
+        "population_prior": 0.55,
+        "smoothed_rate": 0.55
+      },
+      "fold_to_cbet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.45,
+        "confidence": 0.0,
+        "population_prior": 0.45,
+        "smoothed_rate": 0.45
+      },
+      "turn_barrel": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.45,
+        "confidence": 0.0,
+        "population_prior": 0.45,
+        "smoothed_rate": 0.45
+      },
+      "fold_to_turn": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.42,
+        "confidence": 0.0,
+        "population_prior": 0.42,
+        "smoothed_rate": 0.42
+      },
+      "river_bet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.38,
+        "confidence": 0.0,
+        "population_prior": 0.38,
+        "smoothed_rate": 0.38
+      },
+      "fold_to_river": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.4,
+        "confidence": 0.0,
+        "population_prior": 0.4,
+        "smoothed_rate": 0.4
+      },
+      "wtsd": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.3,
+        "confidence": 0.0,
+        "population_prior": 0.3,
+        "smoothed_rate": 0.3
+      },
+      "wsd": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.5,
+        "confidence": 0.0,
+        "population_prior": 0.5,
+        "smoothed_rate": 0.5
+      }
+    },
+    "vpip_opps": 1,
+    "vpip_count": 0,
+    "pfr_opps": 0,
+    "pfr_count": 0,
+    "threebet_opps": 0,
+    "threebet_count": 0,
+    "fold_to_threebet_opps": 0,
+    "fold_to_threebet_count": 0,
+    "cbet_opps": 0,
+    "cbet_count": 0,
+    "fold_to_cbet_opps": 0,
+    "fold_to_cbet_count": 0,
+    "turn_barrel_opps": 0,
+    "turn_barrel_count": 0,
+    "fold_to_turn_opps": 0,
+    "fold_to_turn_count": 0,
+    "river_bet_opps": 0,
+    "river_bet_count": 0,
+    "fold_to_river_opps": 0,
+    "fold_to_river_count": 0,
+    "wtsd_opps": 0,
+    "wtsd_count": 0,
+    "wsd_opps": 0,
+    "wsd_count": 0,
+    "raises_count": 0,
+    "calls_count": 0,
+    "folds_count": 0,
+    "bets_count": 0,
+    "checks_count": 0,
+    "allins_count": 0,
+    "street_actions": {
+      "preflop": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "flop": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "turn": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "river": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      }
+    },
+    "net_pnl": 0,
+    "bb_100": 0.0,
+    "bb_sum": 1000.0,
+    "open_size_n": 0,
+    "cbet_n": 0,
+    "bet_n": 0,
+    "raise_n": 0,
+    "vpip": 0.222,
+    "pfr": 0.18,
+    "threebet": 0.08,
+    "cbet_flop": 0.55,
+    "fold_to_cbet": 0.45,
+    "turn_barrel": 0.45,
+    "fold_to_turn": 0.42,
+    "river_bet": 0.38,
+    "fold_to_river": 0.4,
+    "wtsd": 0.3,
+    "wsd": 0.5,
+    "raise": 0.142,
+    "fold": 0.462,
+    "call": 0.284,
+    "af": 0.0,
+    "open_size_bb": 2.35,
+    "cbet_size": 0.47,
+    "value_bet_size": 0.69,
+    "raise_size": 0.68,
+    "sizing_samples": 0,
+    "archetype": "TAG (紧凶稳健)",
+    "is_station": false,
+    "is_nit": false,
+    "is_maniac": false,
+    "is_passive": false,
+    "is_pushfold": false,
+    "exploit_advice": "尊重其早位Open和3-Bet范围；多在底池较小或有位置时针对其翻牌Miss的牌面浮动跟注偷底。"
+  },
+  "agent_d88670833ef96b8f": {
+    "name": "Echo",
+    "hands": 32,
+    "metrics": {
+      "vpip": {
+        "count": 0,
+        "opportunities": 32,
+        "has_sample": true,
+        "rate": 0.0,
+        "confidence": 0.8,
+        "population_prior": 0.25,
+        "smoothed_rate": 0.05
+      },
+      "pfr": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.18,
+        "confidence": 0.0,
+        "population_prior": 0.18,
+        "smoothed_rate": 0.18
+      },
+      "threebet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.08,
+        "confidence": 0.0,
+        "population_prior": 0.08,
+        "smoothed_rate": 0.08
+      },
+      "fold_to_threebet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.55,
+        "confidence": 0.0,
+        "population_prior": 0.55,
+        "smoothed_rate": 0.55
+      },
+      "cbet_flop": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.55,
+        "confidence": 0.0,
+        "population_prior": 0.55,
+        "smoothed_rate": 0.55
+      },
+      "fold_to_cbet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.45,
+        "confidence": 0.0,
+        "population_prior": 0.45,
+        "smoothed_rate": 0.45
+      },
+      "turn_barrel": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.45,
+        "confidence": 0.0,
+        "population_prior": 0.45,
+        "smoothed_rate": 0.45
+      },
+      "fold_to_turn": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.42,
+        "confidence": 0.0,
+        "population_prior": 0.42,
+        "smoothed_rate": 0.42
+      },
+      "river_bet": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.38,
+        "confidence": 0.0,
+        "population_prior": 0.38,
+        "smoothed_rate": 0.38
+      },
+      "fold_to_river": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.4,
+        "confidence": 0.0,
+        "population_prior": 0.4,
+        "smoothed_rate": 0.4
+      },
+      "wtsd": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.3,
+        "confidence": 0.0,
+        "population_prior": 0.3,
+        "smoothed_rate": 0.3
+      },
+      "wsd": {
+        "count": 0,
+        "opportunities": 0,
+        "has_sample": false,
+        "rate": 0.5,
+        "confidence": 0.0,
+        "population_prior": 0.5,
+        "smoothed_rate": 0.5
+      }
+    },
+    "vpip_opps": 32,
+    "vpip_count": 0,
+    "pfr_opps": 0,
+    "pfr_count": 0,
+    "threebet_opps": 0,
+    "threebet_count": 0,
+    "fold_to_threebet_opps": 0,
+    "fold_to_threebet_count": 0,
+    "cbet_opps": 0,
+    "cbet_count": 0,
+    "fold_to_cbet_opps": 0,
+    "fold_to_cbet_count": 0,
+    "turn_barrel_opps": 0,
+    "turn_barrel_count": 0,
+    "fold_to_turn_opps": 0,
+    "fold_to_turn_count": 0,
+    "river_bet_opps": 0,
+    "river_bet_count": 0,
+    "fold_to_river_opps": 0,
+    "fold_to_river_count": 0,
+    "wtsd_opps": 0,
+    "wtsd_count": 0,
+    "wsd_opps": 0,
+    "wsd_count": 0,
+    "raises_count": 0,
+    "calls_count": 0,
+    "folds_count": 0,
+    "bets_count": 0,
+    "checks_count": 0,
+    "allins_count": 0,
+    "street_actions": {
+      "preflop": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "flop": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "turn": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      },
+      "river": {
+        "bets": 0,
+        "raises": 0,
+        "calls": 0,
+        "folds": 0,
+        "checks": 0,
+        "allins": 0
+      }
+    },
+    "net_pnl": 0,
+    "bb_100": 0.0,
+    "bb_sum": 32000.0,
+    "open_size_n": 0,
+    "cbet_n": 0,
+    "bet_n": 0,
+    "raise_n": 0,
+    "vpip": 0.05,
+    "pfr": 0.18,
+    "threebet": 0.08,
+    "cbet_flop": 0.55,
+    "fold_to_cbet": 0.45,
+    "turn_barrel": 0.45,
+    "fold_to_turn": 0.42,
+    "river_bet": 0.38,
+    "fold_to_river": 0.4,
+    "wtsd": 0.3,
+    "wsd": 0.5,
+    "raise": 0.032,
+    "fold": 0.104,
+    "call": 0.064,
+    "af": 0.0,
+    "open_size_bb": 2.35,
+    "cbet_size": 0.47,
+    "value_bet_size": 0.69,
+    "raise_size": 0.68,
+    "sizing_samples": 0,
+    "archetype": "Passive (被动鱼)",
+    "is_station": false,
+    "is_nit": false,
+    "is_maniac": false,
+    "is_passive": true,
+    "is_pushfold": false,
+    "exploit_advice": "一旦对方Check直接开枪抢池；对方主动下注或加注代表极强成牌，立即弃牌止损。"
   }
 }

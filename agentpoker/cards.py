@@ -235,9 +235,15 @@ def evaluate_relative_strength(hero: list[Card], board: list[Card]) -> dict[str,
         if len(hero_paired_board) == 2:
             tier = "top_two" if max(hero_paired_board) == max(br) else "two_pair"
             base = 0.74 + 0.08 * (hero_paired_board[0] / 14.0)
-        elif pocket_pair and hero_paired_board:
-            tier = "two_pair_pocket"
-            base = 0.70 + 0.07 * (hr[0] / 14.0)
+        elif pocket_pair and board_pair_danger:
+            board_pairs = [r for r in set(br) if br.count(r) >= 2]
+            max_bp = max(board_pairs) if board_pairs else 0
+            if hr[0] > max_bp:
+                tier = "two_pair_overpair_to_board_pair"
+                base = 0.72 + 0.06 * (hr[0] / 14.0)
+            else:
+                tier = "two_pair_underpair_to_board_pair"
+                base = 0.48 + 0.06 * (hr[0] / 14.0)
         elif hero_paired_board and board_pair_danger:
             tier = "two_pair_paired_board"
             kicker = hr[1] if hr[0] in br else hr[0]

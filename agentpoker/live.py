@@ -81,13 +81,16 @@ class LiveRunner:
         self.prev_hand_id: str | None = None
         self.hand_start_stack: int | None = None
         self.last_completed_hand_obj: dict[str, Any] | None = None
+        self.last_completed_table_obj: dict[str, Any] | None = None
         self._standings_rows: list[dict[str, Any]] = []
-        # Net BB for every player at hero's own table, accumulated across the current
-        # 200-hand cycle only -- this is what "how did we do this run" actually means,
-        # since a global standings lookup mixes in whatever happened before this session.
         self._table_cycle_bb: dict[str, float] = {}
         self.last_cycle_table_rank: tuple[int, int] | None = None
         self._hero_agent_id: str | None = None
+        self.session_start_net_result: float | None = None
+        self.session_start_hands: int | None = None
+        self._prev_server_net: float | None = None
+        self.last_server_standing: dict[str, Any] = {}
+        self.last_bankroll: int | None = None
 
         if not self.cid:
             raise ValueError('AGENTPOKER_COMPETITION_ID is required for live mode')
@@ -168,7 +171,7 @@ class LiveRunner:
                     body = self._make_action_body(obs)
                     dec = body.get('decision', {})
                     amt_str = f" amount={dec.get('amount')}" if 'amount' in dec else ""
-                    print(f"[Live] Hand #{self.total_hands_played + 1} | Action -> {dec.get('type')}{amt_str}")
+                    print(f"[Live] Hand #{self.total_hands_played + 1} | Action -> {dec.get('type')}{amt_str}", flush=True)
                     obs = self._action_with_retry(body, obs)
                     continue
 
@@ -205,13 +208,30 @@ class LiveRunner:
         players = table.get("players") or []
         hero_p = next((p for p in players if p.get("agentId") == hero_id), None)
         curr_stack = hero_p.get("stack") if hero_p else None
-        bb_size = float(table.get("bigBlind") or 200.0)
+
+        blinds = table.get("blinds") or {}
+        bb_size = float(blinds.get("big") or blinds.get("bigBlind") or table.get("bigBlind") or 1000.0)
+
+        # Server authoritative standing tracking
+        server_standing = obs.get("standing") or {}
+        server_net = server_standing.get("netResult")
+        if server_standing:
+            self.last_server_standing = server_standing
+        if obs.get("bankroll") is not None:
+            self.last_bankroll = obs.get("bankroll")
+
+        if server_net is not None:
+            if self.session_start_net_result is None:
+                self.session_start_net_result = float(server_net)
+                self._prev_server_net = float(server_net)
+            self.session_net_bb = (float(server_net) - self.session_start_net_result) / bb_size
 
         # Initial hand tracking
         if self.prev_hand_id is None:
             self.prev_hand_id = hid
             self.hand_start_stack = curr_stack
             self.last_completed_hand_obj = hand
+            self.last_completed_table_obj = table
             return
 
         # Detect new hand transition
@@ -227,31 +247,28 @@ class LiveRunner:
 
             # Calculate chip delta
             net_change = None
-            if self.last_completed_hand_obj:
-                prev_players = self.last_completed_hand_obj.get("players") or []
-                prev_hero = next((p for p in prev_players if p.get("agentId") == hero_id), None)
-                if prev_hero and "netChange" in prev_hero and prev_hero["netChange"] is not None:
-                    net_change = float(prev_hero["netChange"])
-
-            if net_change is None:
-                if curr_stack is not None and self.hand_start_stack is not None:
-                    net_change = float(curr_stack - self.hand_start_stack)
-                else:
-                    net_change = 0.0
+            if server_net is not None and self._prev_server_net is not None:
+                net_change = float(server_net) - self._prev_server_net
+                self._prev_server_net = float(server_net)
+            elif curr_stack is not None and self.hand_start_stack is not None:
+                net_change = float(curr_stack - self.hand_start_stack)
+            else:
+                net_change = 0.0
 
             delta_bb = net_change / bb_size
             self.round_net_bb += delta_bb
             self.cycle_net_bb += delta_bb
-            self.session_net_bb += delta_bb
+            if server_net is None or self.session_start_net_result is None:
+                self.session_net_bb += delta_bb
 
             # Track every player at this table for the current cycle, so we can rank
             # hero against actual tablemates instead of a global (and stale) standings call.
-            if self.last_completed_hand_obj:
-                for p in self.last_completed_hand_obj.get("players") or []:
-                    aid = p.get("agentId")
-                    nc = p.get("netChange")
-                    if aid and nc is not None:
-                        self._table_cycle_bb[aid] = self._table_cycle_bb.get(aid, 0.0) + float(nc) / bb_size
+            prev_table_players = (self.last_completed_table_obj or {}).get("players") or (self.last_completed_hand_obj or {}).get("players") or []
+            for p in prev_table_players:
+                aid = p.get("agentId")
+                nc = p.get("netChange")
+                if aid and nc is not None:
+                    self._table_cycle_bb[aid] = self._table_cycle_bb.get(aid, 0.0) + float(nc) / bb_size
 
             # Check for round completion
             hands_in_round = self.total_hands_played % self.round_hands
@@ -267,9 +284,11 @@ class LiveRunner:
             self.prev_hand_id = hid
             self.hand_start_stack = curr_stack
             self.last_completed_hand_obj = hand
+            self.last_completed_table_obj = table
         else:
             # Same hand, refresh snapshot
             self.last_completed_hand_obj = hand
+            self.last_completed_table_obj = table
 
     def _on_round_complete(self, bb_size: float) -> None:
         round_bb100 = (self.round_net_bb / max(1, self.round_hands)) * 100.0
@@ -286,6 +305,15 @@ class LiveRunner:
         print(f" • 比赛阶段: {stage} | 状态评估: {status_str}")
         print(f" • 本轮盈亏: {self.round_net_bb:+.1f} BB ({round_bb100:+.1f} BB/100)")
         print(f" • 赛季累计: {self.cycle_net_bb:+.1f} BB ({cycle_bb100:+.1f} BB/100) vs 晋级黄金线 (+20.0 BB/100)")
+        if self.last_server_standing:
+            s_net = self.last_server_standing.get("netResult", 0)
+            s_rank = self.last_server_standing.get("rank")
+            s_bb100 = self.last_server_standing.get("bbPer100")
+            s_bb100_str = f"{s_bb100:+.1f} BB/100" if s_bb100 is not None else "N/A"
+            s_rank_str = f"第 {s_rank} 名" if s_rank is not None else "待定"
+            print(f" • 官方全场战绩: 净筹码 {s_net:+d} ({s_bb100_str}) | 全场排名: {s_rank_str}")
+        if self.last_bankroll is not None:
+            print(f" • 银行总剩余筹码: {self.last_bankroll:,}")
 
         if self.auto_profile:
             self._update_and_reload_profiles()
@@ -311,6 +339,15 @@ class LiveRunner:
         print(f" 🌟 【第 {self.current_cycle} 届虚拟锦标赛 200 手全赛季大结账】")
         print(f" • 赛季总战绩: {self.cycle_net_bb:+.1f} BB ({cycle_bb100:+.1f} BB/100)")
         print(f" • 晋级推演: {qual_str}")
+        if self.last_server_standing:
+            s_net = self.last_server_standing.get("netResult", 0)
+            s_rank = self.last_server_standing.get("rank")
+            s_bb100 = self.last_server_standing.get("bbPer100")
+            s_bb100_str = f"{s_bb100:+.1f} BB/100" if s_bb100 is not None else "N/A"
+            s_rank_str = f"第 {s_rank} 名" if s_rank is not None else "待定"
+            print(f" • 官方全场战绩: 净筹码 {s_net:+d} ({s_bb100_str}) | 全场排名: {s_rank_str}")
+        if self.last_bankroll is not None:
+            print(f" • 银行总剩余筹码: {self.last_bankroll:,}")
         if rank is not None:
             print(f" • 本周期同桌排名: 第 {rank} 名 (共 {field} 人同桌)")
         print(f" • 下一届虚拟锦标赛 (Cycle {self.current_cycle + 1}) 原地平滑开启...")
@@ -371,12 +408,23 @@ class LiveRunner:
             "best_stage_reached": self.best_stage_reached,
             "table_rank": final_rank,
             "table_field_size": field_size,
+            "server_standing": self.last_server_standing,
+            "bankroll": self.last_bankroll,
         }
 
         print("\n" + "*" * 68)
         print(" 📋 【本场对局总结】")
         print(f" • 停止原因: {reason} | 用时: {duration_s/60:.1f} 分钟")
-        print(f" • 总手数: {hands} 手 | 总盈亏: {self.session_net_bb:+.1f} BB ({session_bb100:+.1f} BB/100)")
+        print(f" • 本场手数: {hands} 手 | 本场盈亏: {self.session_net_bb:+.1f} BB ({session_bb100:+.1f} BB/100)")
+        if self.last_server_standing:
+            s_net = self.last_server_standing.get("netResult", 0)
+            s_rank = self.last_server_standing.get("rank")
+            s_bb100 = self.last_server_standing.get("bbPer100")
+            s_bb100_str = f"{s_bb100:+.1f} BB/100" if s_bb100 is not None else "N/A"
+            s_rank_str = f"第 {s_rank} 名" if s_rank is not None else "待定"
+            print(f" • 官方全场权威总成绩: 净筹码 {s_net:+d} ({s_bb100_str}) | 全场排名: {s_rank_str}")
+        if self.last_bankroll is not None:
+            print(f" • 银行总剩余筹码: {self.last_bankroll:,}")
         print(f" • 最高阶段: {self.best_stage_reached}")
         if final_rank is not None:
             print(f" • 本周期同桌排名: 第 {final_rank} 名 (共 {field_size} 人同桌)")
@@ -446,7 +494,13 @@ class LiveRunner:
         while True:
             try:
                 r = self.client.join(self.cid)
+            except requests.RequestException:
+                time.sleep(1.0)
+                continue
             except APIError as e:
+                if e.code in ('temporarily_unavailable', 'service_unavailable', 'gateway_timeout') or e.status in (502, 503, 504):
+                    time.sleep(e.retry_after or 1.0)
+                    continue
                 if e.code == 'registration_required':
                     raise
                 if e.code == 'competition_not_active':
@@ -469,26 +523,40 @@ class LiveRunner:
         return cs[0]['id']
 
     def _observe_competition(self):
-        try:
-            return self.client.observe(self.cid)
-        except APIError as e:
-            if e.code == 'stale_table':
+        while True:
+            try:
                 return self.client.observe(self.cid)
-            if e.code == 'participation_not_found':
-                self._join_until_ready()
-                return self.client.observe(self.cid)
-            raise
+            except requests.RequestException:
+                time.sleep(1.0)
+                continue
+            except APIError as e:
+                if e.code in ('temporarily_unavailable', 'service_unavailable', 'gateway_timeout') or e.status in (502, 503, 504):
+                    time.sleep(e.retry_after or 1.0)
+                    continue
+                if e.code == 'stale_table':
+                    return self.client.observe(self.cid)
+                if e.code == 'participation_not_found':
+                    self._join_until_ready()
+                    return self.client.observe(self.cid)
+                raise
 
     def _observe_current(self):
         if not self.table_id:
             return self._observe_competition()
-        try:
-            return self.client.observe(self.cid, self.table_id)
-        except APIError as e:
-            if e.code == 'stale_table':
-                self.table_id = None
-                return self.client.observe(self.cid)
-            raise
+        while True:
+            try:
+                return self.client.observe(self.cid, self.table_id)
+            except requests.RequestException:
+                time.sleep(1.0)
+                continue
+            except APIError as e:
+                if e.code in ('temporarily_unavailable', 'service_unavailable', 'gateway_timeout') or e.status in (502, 503, 504):
+                    time.sleep(e.retry_after or 1.0)
+                    continue
+                if e.code == 'stale_table':
+                    self.table_id = None
+                    return self.client.observe(self.cid)
+                raise
 
     def _tournament_context(self, hero_id: str | None = None) -> dict[str, Any]:
         """Context for the current decision, via the shared builder.
@@ -625,12 +693,15 @@ class LiveRunner:
                 r = self.client.leave(body)
                 if r.get('status') == 'accepted':
                     return
+            except requests.RequestException:
+                time.sleep(1.0)
+                continue
             except APIError as e:
                 if e.code == 'stale_table' and 'tableId' in body:
                     body = {'competitionId': self.cid}
                     continue
-                if e.code == 'temporarily_unavailable':
-                    time.sleep(e.retry_after or 1)
+                if e.code in ('temporarily_unavailable', 'service_unavailable', 'gateway_timeout') or e.status in (502, 503, 504):
+                    time.sleep(e.retry_after or 1.0)
                     continue
                 raise
 
