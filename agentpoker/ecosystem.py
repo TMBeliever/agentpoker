@@ -14,7 +14,7 @@ from typing import Any
 import json
 
 from .strategy import StrategyParams
-from .training import ARCHETYPES, profile_to_params
+from .training import ARCHETYPES, profile_to_params, sample_profile_posterior
 
 
 SHARK_ARCHETYPES = ["lag", "maniac"]
@@ -125,6 +125,8 @@ STANDARD_ECOLOGIES: dict[str, EcologySpec] = {
 def load_profile_params_by_tier(
     profiles_path: str | Path | None,
     min_hands: int = 15,
+    sample_posterior: bool = False,
+    rng: Random | None = None,
 ) -> tuple[list[StrategyParams], list[StrategyParams], list[StrategyParams]]:
     """Load profiles and partition into (sharks, regulars, fish)."""
     if not profiles_path:
@@ -148,7 +150,7 @@ def load_profile_params_by_tier(
 
     for p in filtered:
         tier = classify_profile_dict(p)
-        params = profile_to_params(p)
+        params = sample_profile_posterior(p, rng=rng) if (sample_posterior and rng is not None) else profile_to_params(p)
         if tier == "shark":
             sharks.append(params)
         elif tier == "fish":
@@ -255,9 +257,10 @@ def build_ecology_pool(
     ecology: str | EcologySpec,
     count: int,
     profiles_path: str | Path | None = "models/opponent_profiles.json",
-    profile_params: list[StrategyParams] | None = None,
+    profile_params: list[StrategyParams | dict[str, Any]] | None = None,
     min_hands: int = 15,
     seed: int | None = None,
+    sample_posterior: bool = False,
 ) -> list[StrategyParams]:
     """Build an opponent pool of exact length `count` matching the specified ecology.
 
@@ -265,6 +268,7 @@ def build_ecology_pool(
     - Independent sampling across seeds.
     - Deterministic output given the same seed.
     - Real profiles partitioned and weighted according to ecology archetype/tier targets.
+    - Full Bayesian posterior sampling under epistemic uncertainty when sample_posterior=True.
     """
     if count <= 0:
         return []
@@ -286,17 +290,30 @@ def build_ecology_pool(
         p_regs: list[StrategyParams] = []
         p_fish: list[StrategyParams] = []
         for p in profile_params:
-            vpip = getattr(p, "vpip", 0.25)
-            pfr = getattr(p, "threebet_frequency", 0.07) * 2.5
-            af = getattr(p, "attack", 0.5) * 3.0
-            if vpip >= 0.35 and (pfr <= 0.12 or af < 1.0):
-                p_fish.append(p)
-            elif (vpip >= 0.28 and pfr >= 0.18) or af >= 2.5:
-                p_sharks.append(p)
+            if isinstance(p, dict):
+                tier = classify_profile_dict(p)
+                p_item = sample_profile_posterior(p, rng=rng) if sample_posterior else profile_to_params(p)
             else:
-                p_regs.append(p)
+                vpip = getattr(p, "vpip", 0.25)
+                pfr = getattr(p, "threebet_frequency", 0.07) * 2.5
+                af = getattr(p, "attack", 0.5) * 3.0
+                if vpip >= 0.35 and (pfr <= 0.12 or af < 1.0):
+                    tier = "fish"
+                elif (vpip >= 0.28 and pfr >= 0.18) or af >= 2.5:
+                    tier = "shark"
+                else:
+                    tier = "regular"
+                p_item = sample_profile_posterior(p, rng=rng) if sample_posterior else replace(p)
+            if tier == "shark":
+                p_sharks.append(p_item)
+            elif tier == "fish":
+                p_fish.append(p_item)
+            else:
+                p_regs.append(p_item)
     else:
-        p_sharks, p_regs, p_fish = load_profile_params_by_tier(profiles_path, min_hands)
+        p_sharks, p_regs, p_fish = load_profile_params_by_tier(
+            profiles_path, min_hands, sample_posterior=sample_posterior, rng=rng
+        )
 
     ratios = PyramidRatios(spec.shark_ratio, spec.regular_ratio, spec.fish_ratio)
     n_sharks, n_regs, n_fish = ratios.compute_counts(count)
@@ -356,9 +373,10 @@ def build_multi_ecology_pools(
     ecologies: list[str] | list[EcologySpec] | None = None,
     count: int = 120,
     profiles_path: str | Path | None = "models/opponent_profiles.json",
-    profile_params: list[StrategyParams] | None = None,
+    profile_params: list[StrategyParams | dict[str, Any]] | None = None,
     min_hands: int = 15,
     seed_base: int = 42,
+    sample_posterior: bool = False,
 ) -> dict[str, list[StrategyParams]]:
     """Build independent opponent pools for each requested ecology.
 
@@ -380,6 +398,7 @@ def build_multi_ecology_pools(
             profile_params=profile_params,
             min_hands=min_hands,
             seed=eco_seed,
+            sample_posterior=sample_posterior,
         )
     return pools
 

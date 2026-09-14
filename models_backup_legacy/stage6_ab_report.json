@@ -1,0 +1,185 @@
+{
+  "candidate_certified": false,
+  "recommendation": "RETAIN_BASELINE",
+  "seen_track": {
+    "baseline_fitness": 0.32855737903960247,
+    "candidate_fitness": 0.3905381830810014,
+    "baseline_bb100": -21.481666666666673,
+    "candidate_bb100": 138.35333333333332,
+    "ab_test": {
+      "n_a": 10,
+      "n_b": 10,
+      "mean_a": 0.32856,
+      "mean_b": 0.39054,
+      "std_a": 0.20017,
+      "std_b": 0.21123,
+      "delta": 0.06198,
+      "se_diff": 0.09202,
+      "t_stat": 0.6735,
+      "df": 17.95,
+      "p_value": 0.500608,
+      "ci95": [
+        -0.11782,
+        0.23765
+      ],
+      "cohens_d": 0.3012,
+      "win_rate_candidate": 0.8,
+      "statistically_significant": false,
+      "candidate_dominates": false
+    }
+  },
+  "unseen_track": {
+    "baseline_fitness": 0.42084886914988423,
+    "candidate_fitness": 0.3564376123467934,
+    "baseline_bb100": 84.5015873015873,
+    "candidate_bb100": 48.28333333333334,
+    "ab_test": {
+      "n_a": 10,
+      "n_b": 10,
+      "mean_a": 0.42085,
+      "mean_b": 0.35644,
+      "std_a": 0.19673,
+      "std_b": 0.20509,
+      "delta": -0.06441,
+      "se_diff": 0.08987,
+      "t_stat": -0.7167,
+      "df": 17.97,
+      "p_value": 0.473548,
+      "ci95": [
+        -0.22994,
+        0.10959
+      ],
+      "cohens_d": -0.3205,
+      "win_rate_candidate": 0.6,
+      "statistically_significant": false,
+      "candidate_dominates": false
+    }
+  },
+  "shift_track": {
+    "ab_test": {
+      "n_a": 15,
+      "n_b": 15,
+      "mean_a": 0.32156,
+      "mean_b": 0.21552,
+      "std_a": 0.24314,
+      "std_b": 0.21788,
+      "delta": -0.10604,
+      "se_diff": 0.0843,
+      "t_stat": -1.258,
+      "df": 27.67,
+      "p_value": 0.208404,
+      "ci95": [
+        -0.26312,
+        0.0623
+      ],
+      "cohens_d": -0.4593,
+      "win_rate_candidate": 0.3333,
+      "statistically_significant": false,
+      "candidate_dominates": false,
+      "mode_breakdowns": {
+        "extreme_aggression": {
+          "n_a": 5,
+          "n_b": 5,
+          "mean_a": 0.20587,
+          "mean_b": 0.16662,
+          "std_a": 0.20157,
+          "std_b": 0.20623,
+          "delta": -0.03925,
+          "se_diff": 0.12897,
+          "t_stat": -0.3043,
+          "df": 8.0,
+          "p_value": 0.760867,
+          "ci95": [
+            -0.26445,
+            0.18742
+          ],
+          "cohens_d": -0.1925,
+          "win_rate_candidate": 0.6,
+          "statistically_significant": false,
+          "candidate_dominates": false
+        },
+        "extreme_passivity": {
+          "n_a": 5,
+          "n_b": 5,
+          "mean_a": 0.49148,
+          "mean_b": 0.38121,
+          "std_a": 0.23315,
+          "std_b": 0.25843,
+          "delta": -0.11027,
+          "se_diff": 0.15566,
+          "t_stat": -0.7084,
+          "df": 7.92,
+          "p_value": 0.478672,
+          "ci95": [
+            -0.35932,
+            0.17814
+          ],
+          "cohens_d": -0.4481,
+          "win_rate_candidate": 0.4,
+          "statistically_significant": false,
+          "candidate_dominates": false
+        },
+        "unseen_hybrids": {
+          "n_a": 5,
+          "n_b": 5,
+          "mean_a": 0.26734,
+          "mean_b": 0.09873,
+          "std_a": 0.23543,
+          "std_b": 0.04983,
+          "delta": -0.16861,
+          "se_diff": 0.10762,
+          "t_stat": -1.5667,
+          "df": 4.36,
+          "p_value": 0.117193,
+          "ci95": [
+            -0.35233,
+            0.01228
+          ],
+          "cohens_d": -0.9908,
+          "win_rate_candidate": 0.0,
+          "statistically_significant": false,
+          "candidate_dominates": false
+        }
+      }
+    }
+  },
+  "stability_track": {
+    "baseline_robust_fitness": 0.28445739333160347,
+    "candidate_robust_fitness": 0.35356617670765317,
+    "robust_fitness_gain": 0.06911,
+    "baseline_between_ecology_variance": 0.035817,
+    "candidate_between_ecology_variance": 0.027148,
+    "variance_reduction": 0.008669,
+    "baseline_worst_ecology": "aggressive",
+    "candidate_worst_ecology": "aggressive",
+    "ab_test": {
+      "n_a": 10,
+      "n_b": 10,
+      "mean_a": 0.37043,
+      "mean_b": 0.41746,
+      "std_a": 0.24789,
+      "std_b": 0.23557,
+      "delta": 0.04703,
+      "se_diff": 0.10814,
+      "t_stat": 0.4349,
+      "df": 17.95,
+      "p_value": 0.663658,
+      "ci95": [
+        -0.1627,
+        0.2376
+      ],
+      "cohens_d": 0.1945,
+      "win_rate_candidate": 0.85,
+      "statistically_significant": false,
+      "candidate_dominates": false
+    }
+  },
+  "summary": {
+    "no_robust_regression": true,
+    "no_unseen_regression": false,
+    "variance_controlled": true,
+    "robust_fitness_gain": 0.06911,
+    "unseen_fitness_gain": -0.06441,
+    "generalization_certified": false
+  }
+}

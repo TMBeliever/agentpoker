@@ -123,6 +123,18 @@ def main():
     t.add_argument('--base-model',default=None,help='初始底模路径（如 models/champion.json）。没有历史存档或新开特训时以此模型为起点微调，避免从零冷启动')
     t.add_argument('--self-play',action='store_true',default=False,help='启用 2.5 影子自博弈模式：在对手池中常驻历史巅峰克隆体作为守门员，强化防守平衡防反杀')
     t.add_argument('--shadow-clones',type=int,default=2,help='2.5 自博弈模式下同桌常驻的影子克隆体数量（默认 2）')
+    t.add_argument('--ecologies',nargs='*',default=None,help='多生态训练环境列表（默认 5 大生态：balanced aggressive passive mixed adversarial）')
+    t.add_argument('--val-frac',type=float,default=None,help='验证集比例（默认按 holdout-frac 折半，如 0.125）')
+    t.add_argument('--test-frac',type=float,default=None,help='独立测试集比例（默认按 holdout-frac 折半，如 0.125）')
+    ab=sub.add_parser('ab-test',help='4-Way 全流程泛化 A/B 假设检验（Seen/Unseen/Shift/Stability 四维客观检验）')
+    ab.add_argument('--candidate',default='models/candidate.json',help='候选模型文件路径（默认 models/candidate.json）')
+    ab.add_argument('--baseline',default='models/champion.json',help='对比基线模型文件路径（默认 models/champion.json）')
+    ab.add_argument('--runs',type=int,default=10,help='每个赛道评估场数（默认 10）')
+    ab.add_argument('--agents',type=int,default=default_field,help=f'锦标赛参赛规模（默认 {default_field}）')
+    ab.add_argument('--seed',type=int,default=42,help='随机数基准种子')
+    ab.add_argument('--workers',type=int,default=0,help='并发进程数（0=自动）')
+    ab.add_argument('--profiles',default='models/opponent_profiles.json',help='对手画像文件')
+    ab.add_argument('--save-report',default='models/stage6_ab_report.json',help='检验报告输出路径')
     e=sub.add_parser('evaluate',help='离线评估：让指定模型跟真实画像打 N 场锦标赛，看泛化表现（不上真实赛场）')
     e.add_argument('--strategy',default='models/champion.json',help='要评估的模型文件路径')
     e.add_argument('--progressive-blinds', dest='progressive_blinds', action='store_true', default=False, help='启用锦标赛盲注随轮次递增机制')
@@ -233,6 +245,7 @@ def main():
             profiles=profiles_src, holdout_frac=args.holdout_frac, profile_min_hands=args.profile_min_hands,
             profile_share=args.profile_share, profile_top=args.profile_top,
             self_play=args.self_play, shadow_clones=args.shadow_clones,
+            val_frac=args.val_frac, test_frac=args.test_frac, ecologies=args.ecologies,
             tournament_config=tc,
         )
         if profiles_src:
@@ -243,8 +256,43 @@ def main():
         champ, report = trainer.fit(args.generations, args.population, args.runs, save=save_path, archive=archive_dir, final_race=args.final_race, resume=args.resume, reeval_runs=args.reeval_runs, base_model=base_model)
         
         print(f"[Train] 训练完成！候选模型已保存到 {save_path}")
-        print(f"[Train] 提示: 按照生产安全门禁规范，新演化模型必须通过擂台认证门禁后方可晋升为生产冠军:")
+        print(f"[Train] 提示: 按照生产安全门禁规范，新演化模型建议执行全流程 4-Way 泛化 A/B 检验或擂台认证:")
+        print(f"       python -m agentpoker.cli ab-test --candidate {save_path} --baseline models/champion.json")
         print(f"       python -m agentpoker.cli battle --models models/champion.json {save_path} --certify --candidate {save_path} --promote")
+    elif args.cmd == 'ab-test':
+        from .training import _load_params_safe, conduct_generalization_ab_suite
+        print(f"\n[A/B Test] 启动全流程泛化假设检验: Candidate={args.candidate} vs Baseline={args.baseline}...")
+        c_params = _load_params_safe(args.candidate)
+        b_params = _load_params_safe(args.baseline)
+
+        tc = None
+        if getattr(args, 'progressive_blinds', False):
+            if args.agents == 120:
+                tc = TournamentConfig.official_120(progressive_blinds=True)
+            elif args.agents % 6 == 0 and args.agents >= 12:
+                tc = TournamentConfig(field_size=args.agents, progressive_blinds=True)
+
+        prof_src = args.profiles if (args.profiles and os.path.exists(args.profiles)) else None
+        res = conduct_generalization_ab_suite(
+            candidate=c_params,
+            baseline=b_params,
+            runs_per_track=args.runs,
+            pool_size=args.agents,
+            seed_base=args.seed,
+            tournament_config=tc,
+            profiles_path=prof_src,
+            workers=args.workers,
+            verbose=True,
+        )
+
+        p = Path(args.save_report)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"\n[A/B Test 报告已生成] -> {p.resolve()}")
+        print(f"  🏆 泛化认证结论: {'通过认证 (CERTIFIED)' if res['candidate_certified'] else '未通过认证 (REJECTED)'}")
+        print(f"  📢 生产晋升建议: {res['recommendation']}")
+        print(f"  📊 跨生态鲁棒适应度增益: {res['stability_track']['robust_fitness_gain']:+.4f} (生态间方差降低: {res['stability_track']['variance_reduction']:+.6f})")
+        print(f"  ⚡ 未见极值场适应度增益: {res['summary']['unseen_fitness_gain']:+.4f}")
     elif args.cmd=='evaluate':
         pth=StrategyAgent.load(args.strategy).params
         tc = None

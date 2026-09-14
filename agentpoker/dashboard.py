@@ -316,7 +316,9 @@ def get_models_details() -> list[dict[str, Any]]:
             dry_size = float(params.get("dry_board_bet_size", 0.33))
             wet_size = float(params.get("wet_board_bet_size", 0.75))
 
-            fitness = round(float(m.get("fitness", 0.0)), 4)
+            robust_fitness = round(float(m.get("robust_fitness", m.get("fitness", 0.0))), 4)
+            fitness = round(float(m.get("fitness", robust_fitness)), 4)
+            between_var = round(float(m.get("between_ecology_variance", 0.0)), 6)
             top12_rate = round(float(m.get("top12_rate", 0.0)) * 100, 1)
             final_rate = round(float(m.get("final_rate", 0.0)) * 100, 1)
             champion_rate = round(float(m.get("champion_rate", 0.0)) * 100, 1)
@@ -410,6 +412,8 @@ def get_models_details() -> list[dict[str, Any]]:
                 "mtime": mtime_str,
                 "generation": gen,
                 "fitness": fitness,
+                "robust_fitness": robust_fitness,
+                "between_ecology_variance": between_var,
                 "top12_rate": top12_rate,
                 "final_rate": final_rate,
                 "champion_rate": champion_rate,

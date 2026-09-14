@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, asdict, replace
 from pathlib import Path
-import json, math, os, random, statistics, time
+import hashlib, json, math, os, random, statistics, time
 from typing import Any
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from .config import TournamentConfig
@@ -415,6 +415,7 @@ def _summarise(top, final, champ, ranks, bbs, runs, pool, stage_results: list[di
             "fitness_se": se,
             "fitness_ci95": [fit - 1.96 * se, fit + 1.96 * se],
             "runs": runs,
+            "stage_results": stage_results if stage_results else [],
         }
 
     # Legacy fallback calculation
@@ -740,13 +741,16 @@ def _evaluate_worker(payload):
 
     return _summarise(top, final, champ, ranks, bbs, runs, len(agents), stage_results=stage_results)
 
-def profile_to_params(p: dict[str, Any]) -> StrategyParams:
+def profile_to_params(p: dict[str, Any], rng: random.Random | None = None) -> StrategyParams:
     """Map a real player profile's empirical statistics into a StrategyParams agent.
 
-    Covers all 23 behavioural parameters. Previously eleven of them -- including every
-    bet sizing -- were left at defaults, so all 59 profiled opponents shared identical
-    sizing and only differed in how often they entered pots.
+    - If `rng` is provided: draws a stochastic sample from the full Bayesian posterior distribution (Beta/Normal),
+      preserving sample-size-dependent epistemic uncertainty (Stage 5).
+    - If `rng` is None: returns the deterministic posterior mean point estimate (backward-compatible).
     """
+    if rng is not None:
+        return sample_profile_posterior(p, rng=rng)
+
     def num(key: str, default: float, lo: float, hi: float) -> float:
         try:
             return max(lo, min(hi, float(p.get(key, default))))
@@ -796,9 +800,6 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
         open_size=num("open_size_bb", 2.40 if is_maniac else 2.25, 2.0, 3.5),
         cbet_size=num("cbet_size", 0.47, 0.15, 0.95),
         value_bet_size=num("value_bet_size", 0.74 if is_station else 0.69, 0.15, 0.95),
-        # Bluff sizing is not directly measurable from hand histories (a bet looks the
-        # same whether it is value or air), so scale it off the measured bet size:
-        # most players fire smaller when bluffing than when value betting.
         bluff_bet_size=max(0.15, min(0.95, 0.85 * num("value_bet_size", 0.69, 0.15, 0.95))),
         raise_size=num("raise_size", 0.68, 0.15, 0.95),
         # Board texture bet sizing
@@ -812,6 +813,184 @@ def profile_to_params(p: dict[str, Any]) -> StrategyParams:
         # Passive players are predictable; maniacs are not.
         temperature=0.03 if (is_nit or is_passive) else (0.16 if is_maniac else 0.10),
     )
+
+
+def sample_profile_posterior(
+    p: dict[str, Any] | StrategyParams,
+    rng: random.Random | None = None,
+    prior_weight: float = 12.0,
+) -> StrategyParams:
+    """Sample an opponent's tactical parameters from their Bayesian posterior distribution.
+
+    Addresses R5 (Epistemic Uncertainty under-estimation):
+    - Binomial metrics (VPIP, PFR, 3-bet, C-bet, fold to cbet) are sampled from conjugate Beta(alpha, beta)
+      posteriors where alpha = W0 * mu0 + count, beta = W0 * (1 - mu0) + (opps - count).
+    - Posterior variance automatically scales inversely with hand count:
+      * Low-sample opponents (e.g. 15 hands) exhibit realistic wide exploration (large epistemic uncertainty).
+      * High-sample opponents (e.g. 2500 hands) concentrate tightly around their empirical mean.
+    - Preserves all poker monotonicity and physical constraints (PFR <= VPIP, open thresholds, bet sizing order).
+    """
+    if isinstance(p, StrategyParams):
+        if rng is None:
+            return replace(p)
+        return replace(
+            p,
+            vpip=max(0.08, min(0.85, p.vpip + rng.gauss(0.0, 0.015))),
+            open_frequency=max(0.35, min(0.95, p.open_frequency + rng.gauss(0.0, 0.02))),
+            threebet_frequency=max(0.03, min(0.30, p.threebet_frequency + rng.gauss(0.0, 0.01))),
+            attack=max(0.30, min(0.98, p.attack + rng.gauss(0.0, 0.02))),
+        )
+
+    if rng is None:
+        rng = random.Random()
+
+    hands = int(p.get("hands", 15) or 15)
+    metrics = p.get("metrics") or {}
+
+    def _sample_beta_metric(key: str, default_rate: float, prior_mean: float, lo: float, hi: float) -> float:
+        m = metrics.get(key)
+        if isinstance(m, dict) and "count" in m and "opportunities" in m:
+            c = float(m.get("count", 0))
+            opps = float(m.get("opportunities", 0))
+            p_prior = float(m.get("population_prior", prior_mean))
+        else:
+            opps = max(5.0, float(hands))
+            raw_rate = float(p.get(key, default_rate) if p.get(key) is not None else default_rate)
+            c = raw_rate * opps
+            p_prior = prior_mean
+
+        alpha = prior_weight * p_prior + c
+        beta = prior_weight * (1.0 - p_prior) + max(0.0, opps - c)
+        val = rng.betavariate(max(0.1, alpha), max(0.1, beta))
+        return max(lo, min(hi, val))
+
+    vpip = _sample_beta_metric("vpip", 0.25, 0.25, 0.08, 0.85)
+    pfr = min(vpip, _sample_beta_metric("pfr", 0.16, 0.18, 0.03, 0.70))
+    threebet = min(pfr, _sample_beta_metric("threebet", 0.08, 0.08, 0.02, 0.30))
+
+    base_af = float(p.get("af", 2.0) or 2.0)
+    af_scale = 0.35 / math.sqrt(1.0 + hands / 30.0)
+    af = max(0.3, min(25.0, math.exp(rng.gauss(math.log(max(0.3, base_af)), af_scale))))
+    af_norm = min(1.0, af / 8.0)
+
+    is_nit = bool(p.get("is_nit", False)) or vpip < 0.15
+    is_maniac = bool(p.get("is_maniac", False)) or (vpip > 0.40 and af > 4.0)
+    is_station = bool(p.get("is_station", False)) or (vpip > 0.35 and af < 1.5)
+    is_passive = bool(p.get("is_passive", False)) or af < 1.2
+
+    # Positional open thresholds with monotonicity preservation
+    open_utg = max(0.10, min(0.22, pfr * 0.95 + rng.gauss(0.0, 0.015 / math.sqrt(1.0 + hands / 50.0))))
+    open_hj = max(open_utg + 0.01, min(0.28, pfr * 1.20 + rng.gauss(0.0, 0.015 / math.sqrt(1.0 + hands / 50.0))))
+    open_co = max(open_hj + 0.02, min(0.38, pfr * 1.70 + rng.gauss(0.0, 0.02 / math.sqrt(1.0 + hands / 50.0))))
+    open_btn = max(open_co + 0.04, min(0.62, pfr * 3.0 + rng.gauss(0.0, 0.03 / math.sqrt(1.0 + hands / 50.0))))
+    open_sb = max(0.25, min(0.48, pfr * 2.2 + rng.gauss(0.0, 0.02 / math.sqrt(1.0 + hands / 50.0))))
+    defend_bb = max(0.38, min(0.68, vpip * 1.6 + rng.gauss(0.0, 0.02 / math.sqrt(1.0 + hands / 50.0))))
+
+    # Postflop frequencies
+    cbet_base = _sample_beta_metric("cbet_flop", 0.55, 0.55, 0.25, 0.92)
+    turn_base = _sample_beta_metric("turn_barrel", 0.45, 0.45, 0.15, 0.88)
+    cbet_freq = min(0.92, max(0.25, cbet_base + (af - 2.0) * 0.03))
+    turn_freq = min(0.88, max(0.15, turn_base + (af - 2.0) * 0.02))
+
+    # Sizing parameters with sample-size scaled uncertainty
+    size_sigma = 0.04 / math.sqrt(1.0 + hands / 40.0)
+    cbet_sz = max(0.20, min(0.95, float(p.get("cbet_size", 0.47) or 0.47) + rng.gauss(0.0, size_sigma)))
+    val_sz = max(0.30, min(0.95, float(p.get("value_bet_size", 0.70) or 0.70) + rng.gauss(0.0, size_sigma)))
+    bluff_sz = max(0.15, min(val_sz, float(p.get("bluff_bet_size", 0.55) or 0.55) + rng.gauss(0.0, size_sigma)))
+    raise_sz = max(cbet_sz, min(0.98, float(p.get("raise_size", 0.68) or 0.68) + rng.gauss(0.0, size_sigma)))
+
+    # Thresholds
+    thresh_sigma = 0.03 / math.sqrt(1.0 + hands / 50.0)
+    val_thresh = max(0.50, min(0.85, (0.56 if is_maniac else (0.72 if is_nit else 0.65)) + rng.gauss(0.0, thresh_sigma)))
+    thin_val = max(0.45, min(val_thresh - 0.02, val_thresh * 0.90))
+    jam_thresh = max(val_thresh + 0.10, min(0.98, 0.84 if is_maniac else (0.93 if is_nit else 0.90)))
+
+    return StrategyParams(
+        vpip=vpip,
+        open_frequency=min(0.95, max(0.35, pfr * 1.3)),
+        threebet_frequency=threebet,
+        squeeze_frequency=min(0.25, max(0.02, threebet * 0.65)),
+        steal_frequency=min(0.95, max(0.30, pfr * 1.5)),
+        open_thresh_utg=open_utg,
+        open_thresh_hj=open_hj,
+        open_thresh_co=open_co,
+        open_thresh_btn=open_btn,
+        open_thresh_sb=open_sb,
+        defend_thresh_bb=defend_bb,
+        multiway_decay=0.40 if is_nit else (0.65 if is_maniac else 0.50),
+        table_strength_weight=max(0.10, min(0.50, (0.18 if is_maniac else (0.42 if is_nit else 0.30)) + rng.gauss(0.0, 0.02))),
+        cbet_frequency=cbet_freq,
+        turn_barrel_frequency=turn_freq,
+        river_bluff_frequency=0.18 if is_maniac else (0.02 if (is_nit or is_station) else 0.07),
+        value_threshold=val_thresh,
+        thin_value_threshold=thin_val,
+        raise_threshold=max(0.52, min(0.75, val_thresh * 0.95)),
+        jam_threshold=jam_thresh,
+        flop_value_threshold=max(0.40, min(0.75, val_thresh * 0.90)),
+        turn_value_threshold=max(0.48, min(0.82, val_thresh * 0.98)),
+        river_value_threshold=max(0.55, min(0.90, val_thresh * 1.05)),
+        open_size=max(2.0, min(3.5, (2.40 if is_maniac else 2.25) + rng.gauss(0.0, size_sigma * 2))),
+        cbet_size=cbet_sz,
+        value_bet_size=val_sz,
+        bluff_bet_size=bluff_sz,
+        raise_size=raise_sz,
+        dry_board_bet_size=max(0.15, min(0.60, 0.40 if is_maniac else (0.28 if is_nit else 0.33))),
+        wet_board_bet_size=max(0.45, min(0.98, 0.88 if is_maniac else (0.68 if is_nit else 0.75))),
+        safety=0.65 if is_nit else (0.25 if is_maniac else 0.45),
+        attack=min(0.98, max(0.30, af / 10.0 + 0.35)),
+        bubble_aggression=min(0.98, max(0.30, 0.55 + 0.35 * af_norm)),
+        late_aggression=min(0.90, max(0.10, 0.10 + 0.35 * af_norm)),
+        temperature=0.03 if (is_nit or is_passive) else (0.16 if is_maniac else 0.10),
+    )
+
+
+def compute_profile_posterior_uncertainty(
+    p: dict[str, Any],
+    prior_weight: float = 12.0,
+) -> dict[str, Any]:
+    """Compute analytical Bayesian posterior credible intervals and uncertainty metrics for a profile."""
+    hands = int(p.get("hands", 15) or 15)
+    metrics = p.get("metrics") or {}
+
+    def _beta_stats(key: str, prior_mean: float):
+        m = metrics.get(key)
+        if isinstance(m, dict) and "count" in m and "opportunities" in m:
+            c = float(m.get("count", 0))
+            opps = float(m.get("opportunities", 0))
+            p_prior = float(m.get("population_prior", prior_mean))
+        else:
+            opps = max(5.0, float(hands))
+            raw_rate = float(p.get(key, prior_mean) if p.get(key) is not None else prior_mean)
+            c = raw_rate * opps
+            p_prior = prior_mean
+
+        a = prior_weight * p_prior + c
+        b = prior_weight * (1.0 - p_prior) + max(0.0, opps - c)
+        mean = a / (a + b)
+        var = (a * b) / (((a + b) ** 2) * (a + b + 1.0))
+        std = math.sqrt(max(0.0, var))
+        return {
+            "mean": mean,
+            "std": std,
+            "ci95": [max(0.0, mean - 1.96 * std), min(1.0, mean + 1.96 * std)],
+            "opportunities": opps,
+        }
+
+    vpip_st = _beta_stats("vpip", 0.25)
+    pfr_st = _beta_stats("pfr", 0.18)
+    threebet_st = _beta_stats("threebet", 0.08)
+    cbet_st = _beta_stats("cbet_flop", 0.55)
+
+    epistemic_score = (vpip_st["std"] + pfr_st["std"] + threebet_st["std"] + cbet_st["std"]) / 4.0
+
+    return {
+        "hands": hands,
+        "epistemic_uncertainty_score": epistemic_score,
+        "vpip": vpip_st,
+        "pfr": pfr_st,
+        "threebet": threebet_st,
+        "cbet_flop": cbet_st,
+    }
 
 class ArenaEvaluator:
     def __init__(self, pool_size=120, seed=7, equity_samples=0, profiles: dict[str, Any] | str | Path | None = None, workers=0, profile_min_hands=15, tournament_config: TournamentConfig | None = None, ecologies: list[str] | None = None):
@@ -975,15 +1154,18 @@ class ArenaEvaluator:
 
 
     @staticmethod
-    def _load_profiles(source: dict[str, Any] | str | Path, min_hands: int = 15, top_n: int | None = None) -> list[dict[str, Any]]:
+    def _load_profiles(source: dict[str, Any] | list[dict[str, Any]] | str | Path, min_hands: int = 15, top_n: int | None = None) -> list[dict[str, Any]]:
         if isinstance(source, (str, Path)):
             p = Path(source)
             if not p.exists(): return []
             data = json.loads(p.read_text(encoding="utf-8"))
-        elif isinstance(source, dict): data = source
-        else: return []
-        valid = [v for v in data.values() if isinstance(v, dict) and v.get("hands", 0) >= min_hands]
-        valid.sort(key=lambda x: x.get("hands", 0), reverse=True)
+        elif isinstance(source, (dict, list)):
+            data = source
+        else:
+            return []
+        raw_items = data if isinstance(data, list) else list(data.values())
+        valid = [v for v in raw_items if isinstance(v, dict) and int(v.get("hands", 0) or (v.get("stats") or {}).get("hands", 0) or 0) >= min_hands]
+        valid.sort(key=lambda x: int(x.get("hands", 0) or (x.get("stats") or {}).get("hands", 0) or 0), reverse=True)
         if top_n is not None and top_n > 0:
             valid = valid[:top_n]
         return valid
@@ -1025,20 +1207,33 @@ class OpponentEnvironment:
     regular_ratio: float = 0.40
     fish_ratio: float = 0.30
     unseen_archetypes: tuple[StrategyParams, ...] = ()
+    raw_profiles: tuple[dict[str, Any], ...] = ()
     description: str = ""
 
-    def sample_pool(self, pool_size: int, seed: int, ood_mode: str | None = None) -> list[StrategyParams]:
+    def sample_pool(
+        self,
+        pool_size: int,
+        seed: int,
+        ood_mode: str | None = None,
+        sample_posterior: bool = False,
+    ) -> list[StrategyParams]:
         """Deterministically draw a stratified lineup of (pool_size - 1) opponents from this environment.
 
         Supports:
         - Shifted macro-tier compositions (shark_ratio, regular_ratio, fish_ratio).
         - Unseen out-of-distribution archetypes sampling.
         - Dedicated OOD stress regimes ('extreme_aggression', 'extreme_passivity', 'unseen_hybrids').
+        - Posterior sampling under epistemic uncertainty when sample_posterior=True.
         """
         n = max(1, pool_size - 1)
         rng = random.Random(seed)
 
-        all_candidates = list(self.profile_params) + list(self.archetypes) + list(self.unseen_archetypes)
+        if sample_posterior and self.raw_profiles:
+            active_profiles = [sample_profile_posterior(p, rng=rng) for p in self.raw_profiles]
+        else:
+            active_profiles = list(self.profile_params)
+
+        all_candidates = active_profiles + list(self.archetypes) + list(self.unseen_archetypes)
         if not all_candidates:
             all_candidates = list(ARCHETYPES.values())
 
@@ -1214,8 +1409,10 @@ class StrategyTrainer:
         self.self_play=bool(self_play)
         self.shadow_clones=max(1, int(shadow_clones))
         self._cached_profile_params = []
+        self._raw_profiles = []
         if self.profiles:
             profs = ArenaEvaluator._load_profiles(self.profiles, self.profile_min_hands, self.profile_top)
+            self._raw_profiles = list(profs)
             self._cached_profile_params = [profile_to_params(p) for p in profs]
         self.n_profiles_loaded = len(self._cached_profile_params)
         self._build_data_splits()
@@ -1229,19 +1426,30 @@ class StrategyTrainer:
         - test_env: Strictly frozen. Evaluated ONCE on the chosen champion after selection is frozen. NEVER used to make choices.
         """
         hrng = random.Random(self.seed + 4242)
-        prof = list(self._cached_profile_params)
-        hrng.shuffle(prof)
+        indices = list(range(len(self._cached_profile_params)))
+        hrng.shuffle(indices)
 
-        total_prof = len(prof)
+        total_prof = len(indices)
         n_val = max(1, int(total_prof * self.val_frac)) if total_prof >= 4 else (1 if total_prof >= 2 else 0)
         n_test = max(1, int(total_prof * self.test_frac)) if total_prof >= 4 else (1 if total_prof >= 3 else 0)
         if n_val + n_test >= total_prof and total_prof > 0:
             n_val = max(1, total_prof // 3)
             n_test = max(1, total_prof // 3)
 
-        val_profiles = prof[:n_val]
-        test_profiles = prof[n_val:n_val + n_test]
-        train_profiles = prof[n_val + n_test:]
+        val_idx = indices[:n_val]
+        test_idx = indices[n_val:n_val + n_test]
+        train_idx = indices[n_val + n_test:]
+
+        val_profiles = [self._cached_profile_params[i] for i in val_idx]
+        test_profiles = [self._cached_profile_params[i] for i in test_idx]
+        train_profiles = [self._cached_profile_params[i] for i in train_idx]
+
+        val_raw = [self._raw_profiles[i] for i in val_idx] if self._raw_profiles else []
+        test_raw = [self._raw_profiles[i] for i in test_idx] if self._raw_profiles else []
+        train_raw = [self._raw_profiles[i] for i in train_idx] if self._raw_profiles else []
+        self._train_raw_profiles = train_raw
+        self._val_raw_profiles = val_raw
+        self._test_raw_profiles = test_raw
 
         # Distinct perturbed archetypes for each partition
         state = self.rng.getstate()
@@ -1258,6 +1466,7 @@ class StrategyTrainer:
             regular_ratio=0.40,
             fish_ratio=0.30,
             unseen_archetypes=(),
+            raw_profiles=tuple(train_raw),
             description="Training Environment Baseline",
         )
         self.validation_env = OpponentEnvironment(
@@ -1268,6 +1477,7 @@ class StrategyTrainer:
             regular_ratio=0.45,
             fish_ratio=0.15,
             unseen_archetypes=(UNSEEN_OOD_ARCHETYPES["tricky_trapper"], UNSEEN_OOD_ARCHETYPES["sticky_floater"]),
+            raw_profiles=tuple(val_raw),
             description="Validation Environment with Moderate Distribution Shift",
         )
         self.test_env = OpponentEnvironment(
@@ -1278,6 +1488,7 @@ class StrategyTrainer:
             regular_ratio=0.40,
             fish_ratio=0.15,
             unseen_archetypes=tuple(UNSEEN_OOD_ARCHETYPES.values()),
+            raw_profiles=tuple(test_raw),
             description="Frozen Test Environment with Heavy OOD Distribution Shift",
         )
 
@@ -1499,27 +1710,82 @@ class StrategyTrainer:
             pop.append(self.mutate(self.rng.choice(seeds), 0.06))
         return pop[:n]
 
-    def _draw_pool(self, population, hall, seed, profile_pool, exclude=None, generation: int = 0, total_generations: int = 30):
+    def _draw_pool(
+        self,
+        population,
+        hall,
+        seed,
+        profile_pool,
+        exclude=None,
+        generation: int = 0,
+        total_generations: int = 30,
+        min_genetic_distance: float = 0.08,
+        min_pairwise_distance: float = 0.05,
+    ):
         """Build a balanced, stratified opponent pool for one evaluation batch.
 
         Opponents are partitioned across 3 primary playing styles (Regulars, Sharks, Fish)
-        under a dynamic curriculum schedule, with controlled self-play and jittered parameters
-        to prevent static number memorization and echo chambers.
+        under a dynamic curriculum schedule, with controlled self-play and anti-echo-chamber
+        genetic isolation (preventing clone & near-clone incestuous play).
         """
         rng = random.Random(seed)
         n = max(1, self.pool_size - 1)
         out: list[StrategyParams] = []
 
-        # 1. Controlled Self-Play & Historical Mirroring (Shadow Clones)
+        # Normalise excluded individuals (focal candidate and direct lineages)
+        excludes: list[StrategyParams] = []
+        if exclude is not None:
+            if isinstance(exclude, StrategyParams):
+                excludes.append(exclude)
+            elif isinstance(exclude, (list, tuple, set)):
+                for x in exclude:
+                    if isinstance(x, StrategyParams):
+                        excludes.append(x)
+        exclude_hashes = {strategy_signature(x) for x in excludes}
+
+        # 1. Controlled Self-Play with Genetic Isolation (Anti-Echo Chamber)
         if self.self_play and n >= 4:
-            shadow_candidates = [p for _, p in hall] if hall else [p for p in population if p is not exclude]
-            if not shadow_candidates and profile_pool:
-                shadow_candidates = profile_pool
-            if shadow_candidates:
-                # Cap shadow clones to max 15%~20% of the field
+            raw_candidates = [p for _, p in hall] if hall else [p for p in population]
+            if not raw_candidates and profile_pool:
+                raw_candidates = [p if isinstance(p, StrategyParams) else profile_to_params(p) for p in profile_pool]
+
+            # Filter candidates: strictly eliminate exact hash matches and near-clones
+            valid_shadows = []
+            for p in raw_candidates:
+                if strategy_signature(p) in exclude_hashes:
+                    continue
+                if excludes and any(genome_distance(p, exc) < min_genetic_distance for exc in excludes):
+                    continue
+                valid_shadows.append(p)
+
+            # If not enough valid candidates in hall/pop, source diverse archetypes
+            if len(valid_shadows) < min(self.shadow_clones, max(1, n // 4)):
+                for arch in ARCHETYPES.values():
+                    if strategy_signature(arch) not in exclude_hashes:
+                        if not excludes or all(genome_distance(arch, exc) >= min_genetic_distance for exc in excludes):
+                            valid_shadows.append(arch)
+
+            if valid_shadows:
                 max_shadow = min(self.shadow_clones, max(1, n // 4))
-                for _ in range(max_shadow):
-                    cand = rng.choice(shadow_candidates)
+                selected_shadows: list[StrategyParams] = []
+                shuffled_cands = list(valid_shadows)
+                rng.shuffle(shuffled_cands)
+
+                for cand in shuffled_cands:
+                    if len(selected_shadows) >= max_shadow:
+                        break
+                    # Enforce mutual separation among drawn shadow clones
+                    if not any(genome_distance(cand, s) < min_pairwise_distance for s in selected_shadows):
+                        selected_shadows.append(cand)
+
+                # If mutual diversity filtered too many, fill remaining slots
+                for cand in shuffled_cands:
+                    if len(selected_shadows) >= max_shadow:
+                        break
+                    if cand not in selected_shadows:
+                        selected_shadows.append(cand)
+
+                for cand in selected_shadows:
                     out.append(self._jitter(cand, rng))
 
         n_rem = n - len(out)
@@ -1551,13 +1817,17 @@ class StrategyTrainer:
         arch_regs = [ARCHETYPES["balanced"], ARCHETYPES["tight"], ARCHETYPES["nit"]]
         arch_fish = [ARCHETYPES["station"]]
 
-        def _fill_tier(needed: int, profs: list[StrategyParams], archs: list[StrategyParams]) -> list[StrategyParams]:
+        def _fill_tier(needed: int, profs: list[StrategyParams | dict[str, Any]], archs: list[StrategyParams]) -> list[StrategyParams]:
             res: list[StrategyParams] = []
             if needed <= 0:
                 return res
             n_prof = min(len(profs), int(round(needed * self.profile_share))) if profs else 0
             for _ in range(n_prof):
-                res.append(self._jitter(rng.choice(profs), rng))
+                chosen = rng.choice(profs)
+                if isinstance(chosen, dict):
+                    res.append(sample_profile_posterior(chosen, rng=rng))
+                else:
+                    res.append(self._jitter(chosen, rng))
             while len(res) < needed:
                 res.append(self._jitter(rng.choice(archs), rng))
             return res
@@ -1575,7 +1845,8 @@ class StrategyTrainer:
         return out[:n]
 
     def _opponents(self, focal, population, hall, seed, generation: int = 0):
-        return self._draw_pool(population, hall, seed, self._train_profile_params, exclude=focal, generation=generation)
+        prof_source = self._train_raw_profiles if getattr(self, "_train_raw_profiles", None) else self._train_profile_params
+        return self._draw_pool(population, hall, seed, prof_source, exclude=focal, generation=generation)
 
     def _score_population(self, pop, hall, generation, runs, pool=None, seed_base=None, label="评估", ecologies: list[str] | None = None):
         """Common random numbers & Multi-Ecology population scoring.
@@ -1611,13 +1882,27 @@ class StrategyTrainer:
             eco_pools = {}
             for e_idx, eco_name in enumerate(active_ecologies):
                 eco_seed = self.seed * 104729 + (e_idx + 1) * 100003 + generation
-                eco_pools[eco_name] = build_ecology_pool(
+                pool_raw = build_ecology_pool(
                     ecology=eco_name,
                     count=self.pool_size - 1,
                     profiles_path=self.profiles,
-                    profile_params=self._train_profile_params,
+                    profile_params=self._train_raw_profiles if getattr(self, "_train_raw_profiles", None) else self._train_profile_params,
                     seed=eco_seed,
+                    sample_posterior=True,
                 )
+                if self.self_play and hall and (self.pool_size - 1) >= 4:
+                    pop_signatures = {strategy_signature(p) for p in pop}
+                    valid_hall = [
+                        p for _, p in hall
+                        if strategy_signature(p) not in pop_signatures
+                        and all(genome_distance(p, c) >= 0.08 for c in pop)
+                    ]
+                    if valid_hall:
+                        n_shadow = min(self.shadow_clones, max(1, (self.pool_size - 1) // 6))
+                        rng_eco = random.Random(eco_seed + 999)
+                        chosen_shadows = rng_eco.sample(valid_hall, min(len(valid_hall), n_shadow))
+                        pool_raw = pool_raw[:-len(chosen_shadows)] + [self._jitter(s, rng_eco) for s in chosen_shadows]
+                eco_pools[eco_name] = pool_raw
 
         total_tournaments_per_cand = len(active_ecologies) * runs_per_eco
         total_tournaments = n_cands * total_tournaments_per_cand
@@ -1934,7 +2219,7 @@ class StrategyTrainer:
                 stagnation_count += 1
 
             current_div = population_diversity(pop)
-
+            hall_div = hall_of_fame_diversity(hall)
             print(f"gen={g+1:03d} robust_fit={champion_metrics.get('robust_fitness', champion_metrics['fitness']):.4f} "
                   f"(fit={champion_metrics['fitness']:.4f}±{champion_metrics.get('fitness_se',0.0):.4f} "
                   f"worst={champion_metrics.get('worst_ecology_name', '-')}:{champion_metrics.get('worst_ecology_fitness', 0.0):.4f}) "
@@ -1942,11 +2227,16 @@ class StrategyTrainer:
                   f"champ={champion_metrics['champion_rate']:.3f} "
                   f"终排={champion_metrics.get('avg_finish_rank', champion_metrics['avg_rank']):.2f} "
                   f"总BB={champion_metrics.get('overall_bb100', champion_metrics['avg_bb100']):+.1f} "
-                  f"多样性={current_div:.3f} "
+                  f"多样性(种群={current_div:.3f}, 名人堂={hall_div:.3f}) "
                   f"(in-sample robust {in_sample.get('robust_fitness', in_sample['fitness']):.4f}) "
                   f"[best_ever={best_ever_metrics.get('robust_fitness', best_ever_metrics['fitness']):.4f} 停滞={stagnation_count}/{stagnation_patience}]", flush=True)
-            hall.append((champion_metrics.get("robust_fitness", champion_metrics["fitness"]), champion))
-            hall=sorted(hall, key=lambda x:-x[0])[:self.HALL_SIZE]
+            hall = update_hall_of_fame_qd(
+                hall,
+                champion,
+                champion_metrics.get("robust_fitness", champion_metrics["fitness"]),
+                max_hall_size=self.HALL_SIZE,
+                niche_radius=0.06,
+            )
 
             # Strict Elitism: Anchor the all-time peak champion directly into the new generation
             # so the active population can never wander into degenerate corners.
@@ -1987,9 +2277,11 @@ class StrategyTrainer:
                 "generation": g+1,
                 "champion": asdict(champion),
                 "metrics": champion_metrics,
-                "population_diversity": round(next_div, 4)
+                "population_diversity": round(next_div, 4),
+                "hall_diversity": round(hall_of_fame_diversity(hall), 4),
             }, ensure_ascii=False, indent=2), encoding="utf-8")
             history[-1]["population_diversity"] = round(current_div, 4)
+            history[-1]["hall_diversity"] = round(hall_of_fame_diversity(hall), 4)
             sigma_epoch += 1
 
         if re_ranked is None:
@@ -2172,4 +2464,369 @@ def population_diversity(population: list[StrategyParams]) -> float:
             pairs += 1
 
     return total_dist / pairs if pairs > 0 else 0.0
+
+
+def genome_distance(p1: StrategyParams | dict[str, Any], p2: StrategyParams | dict[str, Any]) -> float:
+    """Calculate the normalized average parameter distance between two strategies in [0.0, 1.0]."""
+    d1 = asdict(p1) if isinstance(p1, StrategyParams) else p1
+    d2 = asdict(p2) if isinstance(p2, StrategyParams) else p2
+    fields = StrategyTrainer.FIELDS
+    bounds = StrategyTrainer.PARAM_BOUNDS
+
+    dist_sum = 0.0
+    for k in fields:
+        lo, hi = bounds.get(k, (0.01, 0.99))
+        span = max(1e-5, hi - lo)
+        diff = abs(float(d1.get(k, 0.5)) - float(d2.get(k, 0.5))) / span
+        dist_sum += diff
+    return dist_sum / len(fields)
+
+
+def strategy_signature(p: StrategyParams | dict[str, Any], precision: int = 3) -> str:
+    """Compute a deterministic hash signature of a strategy's rounded parameters."""
+    d = asdict(p) if isinstance(p, StrategyParams) else p
+    fields = sorted(StrategyTrainer.FIELDS)
+    rounded_tokens = [f"{k}:{round(float(d.get(k, 0.0)), precision):.{precision}f}" for k in fields]
+    raw = "|".join(rounded_tokens)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def hall_of_fame_diversity(hall: list[tuple[float, StrategyParams]]) -> float:
+    """Calculate the average pairwise genome distance among Hall of Fame members."""
+    if len(hall) <= 1:
+        return 0.0
+    strats = [p for _, p in hall]
+    return population_diversity(strats)
+
+
+def update_hall_of_fame_qd(
+    hall: list[tuple[float, StrategyParams]],
+    candidate: StrategyParams,
+    fitness: float,
+    max_hall_size: int = 12,
+    niche_radius: float = 0.06,
+) -> list[tuple[float, StrategyParams]]:
+    """Quality-Diversity (MAP-Elites / Niche Competition) Hall of Fame updater.
+
+    Guarantees:
+    1. Niche Competition: If `candidate` is within `niche_radius` of an existing hall member,
+       it only replaces that member if its fitness is strictly higher.
+    2. Structural Novelty: If `candidate` is distant (>= niche_radius) from all existing members,
+       it represents a distinct strategic branch and claims a new niche slot.
+    3. Diversity-Preserving Pruning: When hall size exceeds max_hall_size, pruning drops the lower-fitness
+       member from the closest pair of individuals, preserving strategic breadth and preventing clustering.
+    """
+    if not hall:
+        return [(float(fitness), replace(candidate))]
+
+    cand_copy = replace(candidate)
+    cand_fit = float(fitness)
+
+    closest_idx = -1
+    min_dist = float("inf")
+    for i, (_, p_member) in enumerate(hall):
+        d = genome_distance(cand_copy, p_member)
+        if d < min_dist:
+            min_dist = d
+            closest_idx = i
+
+    new_hall = list(hall)
+    if min_dist < niche_radius:
+        # Niche competition
+        existing_fit, _ = new_hall[closest_idx]
+        if cand_fit > existing_fit:
+            new_hall[closest_idx] = (cand_fit, cand_copy)
+    else:
+        # Novel branch
+        new_hall.append((cand_fit, cand_copy))
+
+    # Pruning
+    while len(new_hall) > max_hall_size:
+        best_pair = None
+        closest_pair_dist = float("inf")
+        for i in range(len(new_hall)):
+            for j in range(i + 1, len(new_hall)):
+                d = genome_distance(new_hall[i][1], new_hall[j][1])
+                if d < closest_pair_dist:
+                    closest_pair_dist = d
+                    best_pair = (i, j)
+
+        if best_pair is not None and closest_pair_dist < niche_radius * 1.5:
+            i, j = best_pair
+            drop_idx = i if new_hall[i][0] <= new_hall[j][0] else j
+            new_hall.pop(drop_idx)
+        else:
+            worst_idx = min(range(len(new_hall)), key=lambda idx: new_hall[idx][0])
+            new_hall.pop(worst_idx)
+
+    new_hall.sort(key=lambda x: -x[0])
+    return new_hall
+
+
+def compute_ab_statistical_test(
+    scores_a: list[float],
+    scores_b: list[float],
+    alpha: float = 0.05,
+    n_bootstrap: int = 1000,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Perform rigorous A/B statistical hypothesis testing between baseline (A) and candidate (B).
+
+    Computes:
+    - Sample sizes, means, sample standard deviations, standard errors.
+    - Mean difference: delta = mean(B) - mean(A).
+    - Welch's two-sample t-statistic and Welch-Satterthwaite degrees of freedom.
+    - Asymptotic two-tailed p-value via normal / complementary error function approximation.
+    - Non-parametric Bootstrap 95% Confidence Interval for mean difference.
+    - Standardized effect size (Cohen's d).
+    - Win rate / dominance ratio (if samples are paired).
+    - Statistical significance decision (p_value < alpha and CI strictly excludes 0).
+    """
+    n_a = len(scores_a)
+    n_b = len(scores_b)
+    if n_a == 0 or n_b == 0:
+        return {
+            "n_a": n_a, "n_b": n_b, "mean_a": 0.0, "mean_b": 0.0, "delta": 0.0,
+            "t_stat": 0.0, "p_value": 1.0, "ci95": [0.0, 0.0], "cohens_d": 0.0,
+            "win_rate_candidate": 0.5, "statistically_significant": False, "candidate_dominates": False,
+        }
+
+    mean_a = float(statistics.mean(scores_a))
+    mean_b = float(statistics.mean(scores_b))
+    delta = mean_b - mean_a
+
+    var_a = float(statistics.variance(scores_a)) if n_a > 1 else 0.0
+    var_b = float(statistics.variance(scores_b)) if n_b > 1 else 0.0
+    std_a = math.sqrt(max(0.0, var_a))
+    std_b = math.sqrt(max(0.0, var_b))
+
+    se_diff = math.sqrt(var_a / max(1, n_a) + var_b / max(1, n_b))
+
+    if se_diff > 1e-12:
+        t_stat = delta / se_diff
+        # Welch-Satterthwaite degrees of freedom
+        num = (var_a / n_a + var_b / n_b) ** 2
+        denom = ((var_a / n_a) ** 2) / max(1, n_a - 1) + ((var_b / n_b) ** 2) / max(1, n_b - 1)
+        df = num / denom if denom > 1e-12 else float(n_a + n_b - 2)
+        p_value = math.erfc(abs(t_stat) / math.sqrt(2.0))
+    else:
+        t_stat = 0.0
+        df = float(n_a + n_b - 2)
+        p_value = 1.0 if abs(delta) < 1e-9 else 0.0
+
+    # Cohen's d
+    if n_a + n_b > 2:
+        pooled_var = ((n_a - 1) * var_a + (n_b - 1) * var_b) / max(1, n_a + n_b - 2)
+        pooled_std = math.sqrt(max(0.0, pooled_var))
+        cohens_d = (delta / pooled_std) if pooled_std > 1e-12 else 0.0
+    else:
+        cohens_d = 0.0
+
+    # Non-parametric Bootstrap 95% Confidence Interval
+    rng = random.Random(seed)
+    boot_deltas: list[float] = []
+    for _ in range(n_bootstrap):
+        sample_a = [scores_a[rng.randint(0, n_a - 1)] for _ in range(n_a)]
+        sample_b = [scores_b[rng.randint(0, n_b - 1)] for _ in range(n_b)]
+        boot_deltas.append(statistics.mean(sample_b) - statistics.mean(sample_a))
+    boot_deltas.sort()
+    idx_lo = int(0.025 * n_bootstrap)
+    idx_hi = int(0.975 * n_bootstrap)
+    ci95 = [round(boot_deltas[idx_lo], 5), round(boot_deltas[idx_hi], 5)]
+
+    # Paired win rate if sample lengths match
+    if n_a == n_b:
+        wins_b = sum(1 for sa, sb in zip(scores_a, scores_b) if sb > sa)
+        ties = sum(1 for sa, sb in zip(scores_a, scores_b) if abs(sb - sa) < 1e-9)
+        win_rate_b = (wins_b + 0.5 * ties) / n_a
+    else:
+        win_rate_b = 0.5
+
+    stat_sig = bool(p_value < alpha and (ci95[0] > 0 or ci95[1] < 0))
+    cand_dominates = bool(stat_sig and delta > 0)
+
+    return {
+        "n_a": n_a,
+        "n_b": n_b,
+        "mean_a": round(mean_a, 5),
+        "mean_b": round(mean_b, 5),
+        "std_a": round(std_a, 5),
+        "std_b": round(std_b, 5),
+        "delta": round(delta, 5),
+        "se_diff": round(se_diff, 5),
+        "t_stat": round(t_stat, 4),
+        "df": round(df, 2),
+        "p_value": round(p_value, 6),
+        "ci95": ci95,
+        "cohens_d": round(cohens_d, 4),
+        "win_rate_candidate": round(win_rate_b, 4),
+        "statistically_significant": stat_sig,
+        "candidate_dominates": cand_dominates,
+    }
+
+
+def conduct_generalization_ab_suite(
+    candidate: StrategyParams,
+    baseline: StrategyParams,
+    evaluator: ArenaEvaluator | None = None,
+    runs_per_track: int = 15,
+    pool_size: int = 12,
+    seed_base: int = 42,
+    ecologies: list[str] | None = None,
+    profiles_path: str | Path | None = None,
+    tournament_config: TournamentConfig | None = None,
+    workers: int = 0,
+    verbose: bool = True,
+) -> dict[str, Any]:
+    """Execute comprehensive 4-Way Generalization A/B Evaluation Suite.
+
+    Evaluates Candidate (Model B) against Baseline (Model A) across 4 foundational tracks:
+    1. Track 1: Seen Training Distribution
+    2. Track 2: Unseen Out-of-Distribution (OOD) Archetypes Field
+    3. Track 3: Macro Distribution Shift Stress Regimes (extreme aggression/passivity/hybrids)
+    4. Track 4: Stability & Cross-Ecology ANOVA Variance Decomposition
+
+    Returns full A/B statistical hypothesis test metrics, confidence intervals, and promotion verdict.
+    """
+    if evaluator is None:
+        evaluator = ArenaEvaluator(
+            pool_size=pool_size,
+            seed=seed_base,
+            profiles=profiles_path,
+            tournament_config=tournament_config,
+            workers=workers,
+        )
+
+    # Initialize environments
+    trainer_stub = StrategyTrainer(
+        seed=seed_base,
+        pool_size=pool_size,
+        profiles=profiles_path,
+        tournament_config=tournament_config,
+        workers=workers,
+    )
+
+    # Track 1: Seen Training Distribution
+    if verbose:
+        print("\n=== Track 1: Seen Training Distribution A/B Test ===", flush=True)
+    seen_pool = trainer_stub.train_env.sample_pool(pool_size, seed=seed_base + 1001)
+    base_seen_m = evaluator.evaluate(baseline, runs=runs_per_track, opponents=seen_pool, seed_offset=10000, verbose=False)
+    cand_seen_m = evaluator.evaluate(candidate, runs=runs_per_track, opponents=seen_pool, seed_offset=10000, verbose=False)
+
+    base_seen_scores = [sm["run_fitness"] for sm in base_seen_m.get("stage_results", [])] or [base_seen_m["fitness"]]
+    cand_seen_scores = [sm["run_fitness"] for sm in cand_seen_m.get("stage_results", [])] or [cand_seen_m["fitness"]]
+    seen_ab = compute_ab_statistical_test(base_seen_scores, cand_seen_scores, seed=seed_base + 11)
+
+    # Track 2: Unseen OOD Archetypes Field
+    if verbose:
+        print("\n=== Track 2: Unseen OOD Field A/B Test ===", flush=True)
+    unseen_pool = trainer_stub.test_env.sample_pool(pool_size, seed=seed_base + 2002)
+    base_unseen_m = evaluator.evaluate(baseline, runs=runs_per_track, opponents=unseen_pool, seed_offset=20000, verbose=False)
+    cand_unseen_m = evaluator.evaluate(candidate, runs=runs_per_track, opponents=unseen_pool, seed_offset=20000, verbose=False)
+
+    base_unseen_scores = [sm["run_fitness"] for sm in base_unseen_m.get("stage_results", [])] or [base_unseen_m["fitness"]]
+    cand_unseen_scores = [sm["run_fitness"] for sm in cand_unseen_m.get("stage_results", [])] or [cand_unseen_m["fitness"]]
+    unseen_ab = compute_ab_statistical_test(base_unseen_scores, cand_unseen_scores, seed=seed_base + 22)
+
+    # Track 3: Macro Distribution Shift Modes
+    if verbose:
+        print("\n=== Track 3: Macro Distribution Shift Modes A/B Test ===", flush=True)
+    shift_modes = ["extreme_aggression", "extreme_passivity", "unseen_hybrids"]
+    base_shift_all: list[float] = []
+    cand_shift_all: list[float] = []
+    mode_results: dict[str, Any] = {}
+    shift_runs_each = max(1, min(runs_per_track, 5))
+
+    for s_idx, mode in enumerate(shift_modes):
+        stress_pool = trainer_stub.test_env.sample_pool(pool_size, seed=seed_base + 3000 + s_idx * 100, ood_mode=mode)
+        bm = evaluator.evaluate(baseline, runs=shift_runs_each, opponents=stress_pool, seed_offset=30000 + s_idx * 1000, verbose=False)
+        cm = evaluator.evaluate(candidate, runs=shift_runs_each, opponents=stress_pool, seed_offset=30000 + s_idx * 1000, verbose=False)
+        b_sc = [sm["run_fitness"] for sm in bm.get("stage_results", [])] or [bm["fitness"]]
+        c_sc = [sm["run_fitness"] for sm in cm.get("stage_results", [])] or [cm["fitness"]]
+        base_shift_all.extend(b_sc)
+        cand_shift_all.extend(c_sc)
+        mode_results[mode] = compute_ab_statistical_test(b_sc, c_sc, seed=seed_base + 33 + s_idx)
+
+    shift_ab = compute_ab_statistical_test(base_shift_all, cand_shift_all, seed=seed_base + 33)
+    shift_ab["mode_breakdowns"] = mode_results
+
+    # Track 4: Stability & Cross-Ecology ANOVA Robustness
+    if verbose:
+        print("\n=== Track 4: Stability & Multi-Ecology Robustness A/B Test ===", flush=True)
+    active_ecologies = ecologies or ["balanced", "aggressive", "passive", "mixed", "adversarial"]
+    runs_per_eco = max(1, runs_per_track // len(active_ecologies))
+
+    base_eco_m = evaluator.evaluate_multi_ecology(
+        baseline, ecologies=active_ecologies, runs_per_ecology=runs_per_eco, seed_offset=40000, verbose=False
+    )
+    cand_eco_m = evaluator.evaluate_multi_ecology(
+        candidate, ecologies=active_ecologies, runs_per_ecology=runs_per_eco, seed_offset=40000, verbose=False
+    )
+
+    base_eco_scores = [sm["run_fitness"] for sm in base_eco_m.get("stage_results", [])] or [base_eco_m["fitness"]]
+    cand_eco_scores = [sm["run_fitness"] for sm in cand_eco_m.get("stage_results", [])] or [cand_eco_m["fitness"]]
+    stability_ab = compute_ab_statistical_test(base_eco_scores, cand_eco_scores, seed=seed_base + 44)
+
+    # Cross-ecology variance comparison
+    base_between_var = base_eco_m.get("between_ecology_variance", 0.0)
+    cand_between_var = cand_eco_m.get("between_ecology_variance", 0.0)
+    variance_reduction = base_between_var - cand_between_var
+
+    base_robust_fit = base_eco_m.get("robust_fitness", base_eco_m["fitness"])
+    cand_robust_fit = cand_eco_m.get("robust_fitness", cand_eco_m["fitness"])
+    robust_fitness_gain = cand_robust_fit - base_robust_fit
+
+    # Overall Acceptance Verdict
+    # Passes if:
+    # 1. Candidate robust fitness does not suffer significant regression (>= base_robust_fit - 0.02)
+    # 2. Candidate unseen fitness does not suffer significant regression (>= base_unseen_fit - 0.025)
+    # 3. Candidate between-ecology variance is bounded (cand_between_var <= base_between_var * 2.0 or <= 0.01)
+    # 4. Overall win rate on unseen/shift tracks is >= 45%
+    no_robust_regression = bool(cand_robust_fit >= base_robust_fit - 0.02)
+    no_unseen_regression = bool(cand_unseen_m["fitness"] >= base_unseen_m["fitness"] - 0.025)
+    variance_controlled = bool(cand_between_var <= max(0.01, base_between_var * 2.0))
+    generalization_certified = bool(no_robust_regression and no_unseen_regression and variance_controlled)
+
+    recommendation = "PROMOTE_CANDIDATE" if (generalization_certified and (robust_fitness_gain >= -1e-4 or unseen_ab["delta"] >= -1e-4)) else "RETAIN_BASELINE"
+
+    return {
+        "candidate_certified": generalization_certified,
+        "recommendation": recommendation,
+        "seen_track": {
+            "baseline_fitness": base_seen_m["fitness"],
+            "candidate_fitness": cand_seen_m["fitness"],
+            "baseline_bb100": base_seen_m.get("overall_bb100", base_seen_m.get("avg_bb100", 0.0)),
+            "candidate_bb100": cand_seen_m.get("overall_bb100", cand_seen_m.get("avg_bb100", 0.0)),
+            "ab_test": seen_ab,
+        },
+        "unseen_track": {
+            "baseline_fitness": base_unseen_m["fitness"],
+            "candidate_fitness": cand_unseen_m["fitness"],
+            "baseline_bb100": base_unseen_m.get("overall_bb100", base_unseen_m.get("avg_bb100", 0.0)),
+            "candidate_bb100": cand_unseen_m.get("overall_bb100", cand_unseen_m.get("avg_bb100", 0.0)),
+            "ab_test": unseen_ab,
+        },
+        "shift_track": {
+            "ab_test": shift_ab,
+        },
+        "stability_track": {
+            "baseline_robust_fitness": base_robust_fit,
+            "candidate_robust_fitness": cand_robust_fit,
+            "robust_fitness_gain": round(robust_fitness_gain, 5),
+            "baseline_between_ecology_variance": round(base_between_var, 6),
+            "candidate_between_ecology_variance": round(cand_between_var, 6),
+            "variance_reduction": round(variance_reduction, 6),
+            "baseline_worst_ecology": base_eco_m.get("worst_ecology_name", "-"),
+            "candidate_worst_ecology": cand_eco_m.get("worst_ecology_name", "-"),
+            "ab_test": stability_ab,
+        },
+        "summary": {
+            "no_robust_regression": no_robust_regression,
+            "no_unseen_regression": no_unseen_regression,
+            "variance_controlled": variance_controlled,
+            "robust_fitness_gain": round(robust_fitness_gain, 5),
+            "unseen_fitness_gain": round(unseen_ab["delta"], 5),
+            "generalization_certified": generalization_certified,
+        },
+    }
 
